@@ -1,0 +1,32 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Joon",email = "kkkths@naver.com"}
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi (>=0.136.3,<0.137.0)",
+    "uvicorn (>=0.49.0,<0.50.0)",
+    "sqlalchemy (>=2.0.50,<3.0.0)",
+    "asyncpg (>=0.31.0,<0.32.0)",
+    "pydantic-settings (>=2.14.1,<3.0.0)",
+    "python-dotenv (>=1.2.2,<2.0.0)",
+    "yfinance (>=1.4.1,<2.0.0)",
+    "pykrx (>=1.2.8,<2.0.0)",
+    "requests (>=2.34.2,<3.0.0)",
+    "google-generativeai (>=0.8.6,<0.9.0)",
+    "celery (>=5.6.3,<6.0.0)",
+    "redis (>=8.0.0,<9.0.0)",
+    "feedparser (>=6.0.12,<7.0.0)"
+]
+
+[tool.poetry]
+packages = [{include = "backend", from = "src"}]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
