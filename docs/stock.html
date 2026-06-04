@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>개인화 AI 주식 리포트 자동화 시스템 상세 기획서</title>
+    <style>
+        :root {
+            --primary-color: #0f172a;
+            --accent-color: #3b82f6;
+            --bg-color: #f1f5f9;
+            --card-bg: #ffffff;
+            --text-main: #334155;
+            --text-muted: #64748b;
+            --border-color: #cbd5e1;
+            --badge-bg: #e0e7ff;
+            --badge-text: #4f46e5;
+        }
+        body {
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.7;
+            margin: 0;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            padding: 50px;
+            border-radius: 16px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 30px;
+        }
+        .header h1 {
+            font-size: 2.5rem;
+            color: var(--primary-color);
+            margin: 0 0 10px 0;
+            letter-spacing: -1px;
+        }
+        .header p {
+            color: var(--text-muted);
+            font-size: 1.2rem;
+            margin: 0;
+        }
+        h2 {
+            color: var(--accent-color);
+            font-size: 1.75rem;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+        h3 {
+            color: var(--primary-color);
+            font-size: 1.25rem;
+            margin-top: 25px;
+        }
+        ul, ol {
+            padding-left: 24px;
+            margin-bottom: 20px;
+        }
+        li {
+            margin-bottom: 10px;
+        }
+        strong {
+            color: var(--primary-color);
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .card {
+            background: var(--bg-color);
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+        }
+        .card h3 {
+            margin-top: 0;
+            border-bottom: 1px dashed var(--border-color);
+            padding-bottom: 10px;
+        }
+        pre {
+            background: #1e293b;
+            color: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'D2Coding', 'Consolas', monospace;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+        .badge {
+            display: inline-block;
+            background: var(--badge-bg);
+            color: var(--badge-text);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-right: 6px;
+            margin-bottom: 6px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>📊 개인화 AI 주식 리포트 자동화 시스템</h1>
+        <p>상세 기획서 및 아키텍처 명세서 (v1.0)</p>
+    </div>
+
+    <h2>1. 프로젝트 개요 (Project Overview)</h2>
+    <ul>
+        <li><strong>프로젝트명:</strong> 퀀트 & 센티멘트 기반 AI 주식 대시보드 (가칭: StockInsight AI)</li>
+        <li><strong>목적:</strong> 흩어져 있는 글로벌 거시 경제 지표, 개별 종목의 펀더멘털, 실시간 뉴스를 통합하고 LLM(대규모 언어 모델)을 통해 분석하여 매일 아침 직관적인 투자 인사이트를 제공한다.</li>
+        <li><strong>타겟 사용자:</strong> 1인 (개인 맞춤형 투자 결정 지원 툴)</li>
+    </ul>
+
+    <h2>2. 기술 스택 (Tech Stack)</h2>
+    <div class="grid">
+        <div class="card">
+            <h3>🗄️ Backend & Infra</h3>
+            <ul>
+                <li><strong>Framework:</strong> FastAPI (Python 비동기 처리)</li>
+                <li><strong>Package Manager:</strong> <span class="badge">Poetry</span> (pyproject.toml 기반 엄격한 의존성 관리)</li>
+                <li><strong>Database:</strong> PostgreSQL (asyncpg, Pydantic)</li>
+                <li><strong>Task Queue:</strong> Celery + Redis (스케줄링)</li>
+            </ul>
+        </div>
+        <div class="card">
+            <h3>💻 Frontend (UI/UX)</h3>
+            <ul>
+                <li><strong>Framework:</strong> Next.js (App Router 활용)</li>
+                <li><strong>Styling:</strong> Tailwind CSS, 점진적 공개(Progressive Disclosure) 패턴</li>
+                <li><strong>Data Fetching:</strong> SWR 또는 React Query (Cache-aside)</li>
+            </ul>
+        </div>
+        <div class="card">
+            <h3>🤖 AI & Data Pipeline</h3>
+            <ul>
+                <li><strong>Data Sources:</strong> yfinance(해외), pykrx(국내), DART API(공시), FRED/News RSS</li>
+                <li><strong>LLM API:</strong> Gemini API (또는 GPT-4o / Claude 3.5)</li>
+            </ul>
+        </div>
+    </div>
+
+    <h2>3. 핵심 기능 명세 (Core Features)</h2>
+    <ol>
+        <li><strong>AI 기반 센티멘트 분석 및 하이드 바 (Hide Bar):</strong> 크롤링된 실시간 뉴스를 LLM이 분석하여 0~100점의 스코어 도출. UI에서는 뱃지만 노출하고 클릭 시 원문/3줄 요약/흐름을 하이드 바로 제공.</li>
+        <li><strong>등락률(%) 기반 AI 종목 추천 (Long/Short):</strong> 거래량/시총 상위 종목을 스캔하여 예상 등락률을 도출하고 <strong>내림차순 정렬</strong> 렌더링.</li>
+        <li><strong>기업 펀더멘털 실시간 조회 (Cache-aside):</strong> PBR, PER, ROE, 시가총액, 배당수익률, 외국인 소진율 제공. DB 캐시 만료 시 외부 API로 즉각 갱신.</li>
+        <li><strong>LLM 기반 종목 강점(Strengths) 스코어링:</strong> 5가지 지표(수익성, 성장성, 저평가, 안정성, 모멘텀) 기반 레이더 차트 및 해시태그 생성.</li>
+        <li><strong>디스코드(Discord) 모닝 알림 자동화:</strong> 매일 08:30 장 시작 전 관심 종목 이슈 및 Long/Short Top 3를 Embed 메시지로 발송.</li>
+    </ol>
+
+    <h2>4. 화면 및 라우팅 설계 (Information Architecture)</h2>
+    <ul>
+        <li>🏠 <strong>/app/page.tsx (홈 오버뷰):</strong> 글로벌 매크로 지표 롤링 티커, AI 요약 브리핑.</li>
+        <li>📌 <strong>/app/watchlist/page.tsx (내 관심 종목):</strong> 펀더멘털 지표 테이블, 종목별 강점 레이더 차트 및 해시태그.</li>
+        <li>🚀 <strong>/app/discover/page.tsx (AI 예측 및 탐색):</strong> 전체 시장 스캔 기반 Long/Short 종목 리스트 (등락률 내림차순 정렬).</li>
+        <li>📰 <strong>/app/news/page.tsx (뉴스 허브):</strong> 마켓 센티멘트 게이지, 핫 키워드 태그, AI 필터링 뉴스 타임라인.</li>
+        <li>⚙️ <strong>/app/settings/page.tsx (환경 설정):</strong> 관심 종목 티커 관리, 디스코드 Webhook URL 설정.</li>
+    </ul>
+
+    <h2>5. 데이터 파이프라인 흐름도 (Data Workflow)</h2>
+<pre>
+[05:00] 비동기 데이터 크롤링 (Celery Workers -> yfinance, pykrx, DART)
+   ↓
+[05:30] Pydantic 스키마 검증 및 PostgreSQL DB 적재
+   ↓
+[06:00] RAG 기반 LLM 파이프라인 가동 (JSON Mode 구조화)
+        - 뉴스 센티멘트 스코어링, 강점 태그 생성, Long/Short 예측
+   ↓
+[08:30] Discord Webhook 모닝 브리핑 발송
+   ↓
+[Anytime] Next.js 대시보드 접속 -> FastAPI를 통한 DB 및 실시간 API 렌더링
+</pre>
+
+    <h2>6. Phase 1 (초기 개발 마일스톤)</h2>
+    <ul>
+        <li><strong>Step 1:</strong> Poetry 초기화, FastAPI 및 PostgreSQL 연동.</li>
+        <li><strong>Step 2:</strong> Pydantic 활용 스키마 작성 및 DB 마이그레이션.</li>
+        <li><strong>Step 3:</strong> yfinance, pykrx 연동 및 LLM API 프롬프트 주입 테스트.</li>
+        <li><strong>Step 4:</strong> 프론트엔드 연동을 위한 /api/stocks, /api/news REST API 구축.</li>
+        <li><strong>Step 5:</strong> Next.js 라우팅 세팅 및 핵심 UI 컴포넌트(하이드 바, 정렬 등) 개발.</li>
+    </ul>
+</div>
+
+</body>
+</html>
