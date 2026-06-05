@@ -14,7 +14,6 @@ class DiscordNotifier:
         매일 아침 장 시작 전 브리핑을 디코드로 전송합니다.
         """
         if not self.webhook_url:
-            print("Discord Webhook URL not configured")
             return
 
         embeds = [
@@ -24,14 +23,20 @@ class DiscordNotifier:
                 "color": 0x3b82f6, # Blue
                 "fields": [
                     {
-                        "name": "🚀 AI 추천 Long Top 3",
-                        "value": "\n".join([f"**{s['name']}** ({s['ticker']}): {s['ai_score']}점" for s in top_longs]) or "데이터 없음",
-                        "inline": True
+                        "name": "🚀 매수 Top 3 (롱)",
+                        "value": "\n".join([
+                            f"**{s['name']}** ({s['ticker']}): {s.get('ai_score', '-')}점\n↳ {s.get('hot_reason', '')[:80]}"
+                            for s in top_longs
+                        ]) or "데이터 없음",
+                        "inline": False
                     },
                     {
-                        "name": "📉 AI 추천 Short Top 3",
-                        "value": "\n".join([f"**{s['name']}** ({s['ticker']}): {s['ai_score']}점" for s in top_shorts]) or "데이터 없음",
-                        "inline": True
+                        "name": "📉 매도 Top 3 (숏)",
+                        "value": "\n".join([
+                            f"**{s['name']}** ({s['ticker']}): {s.get('ai_score', '-')}점\n↳ {s.get('hot_reason', '')[:80]}"
+                            for s in top_shorts
+                        ]) or "데이터 없음",
+                        "inline": False
                     }
                 ],
                 "footer": {"text": "StockInsight AI System"}
@@ -42,5 +47,5 @@ class DiscordNotifier:
         try:
             response = requests.post(self.webhook_url, json=payload)
             response.raise_for_status()
-        except Exception as e:
-            print(f"Error sending Discord notification: {e}")
+        except Exception:
+            pass

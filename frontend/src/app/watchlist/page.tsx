@@ -1,19 +1,21 @@
 import StockTable from '@/components/StockTable';
+import { Plus } from 'lucide-react';
 
 export default function WatchlistPage() {
   return (
     <div className="space-y-6">
-      <header className="flex justify-between items-end">
+      <header className="flex items-end justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">내 관심 종목</h1>
-          <p className="text-slate-500 mt-1">펀더멘털 지표 및 AI 기반 투자 인사이트</p>
+          <h1 className="text-2xl font-bold tracking-tight text-neutral-900">내 관심 종목</h1>
+          <p className="mt-1 text-sm text-neutral-500">펀더멘털 지표 및 AI 기반 투자 인사이트</p>
         </div>
-        <button className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-800 transition-colors">
+        <button type="button" className="btn-primary flex items-center gap-2 px-5 py-2.5 text-sm">
+          <Plus size={18} />
           종목 추가
         </button>
       </header>
-      
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+
+      <div className="card-modern overflow-hidden">
         <StockTable />
       </div>
     </div>
