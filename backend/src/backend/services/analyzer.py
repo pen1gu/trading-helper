@@ -13,7 +13,7 @@ load_dotenv()
 class AIAnalyzer:
     def __init__(self):
         api_key = os.getenv("GEMINI_API_KEY")
-        self.model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+        self.model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
         if api_key:
             genai.configure(api_key=api_key)
             self.model = genai.GenerativeModel(self.model_name)

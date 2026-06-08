@@ -56,6 +56,8 @@ class StockBase(BaseModel):
     ai_score: Optional[int] = None
     ai_recommendation: Optional[str] = None
     ai_analysis: Optional[Dict] = None
+    business_insight: Optional[Dict] = None
+    financials_collected_at: Optional[datetime] = None
 
 class StockCreate(StockBase):
     pass
@@ -188,3 +190,14 @@ class CollectReportResponse(BaseModel):
     collected_at: datetime
     processed_count: int
     errors: List[str] = []
+
+
+class BusinessInsightResponse(BaseModel):
+    status: str
+    moat_proxy: Optional[Dict] = None
+    rd_efficiency: Optional[Dict] = None
+    capital_allocation: Optional[Dict] = None
+    data_years: Optional[List[int]] = None
+    source: Optional[str] = None
+    collected_at: Optional[str] = None
+    message: Optional[str] = None

@@ -79,6 +79,10 @@ class Stock(Base):
     ai_recommendation = Column(String) # Long, Short, Neutral
     ai_analysis = Column(JSON) # Strengths (수익성, 성장성, 저평가, 안정성, 모멘텀)
 
+    # Business insight (rule-based, no AI)
+    business_insight = Column(JSON)
+    financials_collected_at = Column(DateTime(timezone=True))
+
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
 

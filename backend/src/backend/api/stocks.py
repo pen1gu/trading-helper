@@ -4,6 +4,7 @@ from sqlalchemy import select, desc, or_
 from typing import List, Optional
 from ..database import get_db
 from .. import models, schemas
+from ..services.business_insight_service import get_or_fetch_business_insight
 from ..services.report_pipeline import latest_trade_date
 
 router = APIRouter()
@@ -53,6 +54,18 @@ async def scan_stocks(
         
     result = await db.execute(query.limit(200)) # 표시 개수 확장
     return result.scalars().all()
+
+@router.get("/{ticker}/business-insight", response_model=schemas.BusinessInsightResponse)
+async def get_business_insight(
+    ticker: str,
+    refresh: bool = Query(False, description="Force refresh financial data"),
+    db: AsyncSession = Depends(get_db),
+):
+    insight = await get_or_fetch_business_insight(db, ticker, force_refresh=refresh)
+    if insight.get("status") == "not_found":
+        raise HTTPException(status_code=404, detail="Stock not found")
+    return insight
+
 
 @router.get("/{ticker}", response_model=schemas.Stock)
 async def get_stock(ticker: str, db: AsyncSession = Depends(get_db)):

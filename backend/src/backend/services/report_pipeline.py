@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import models
 from ..logging_config import task_logger
+from .business_insight_service import collect_business_insight_for_stock
 from .feature_store import build_analysis_context, collect_stock_features
 from .notifier import DiscordNotifier
 from .watchlist import (
@@ -170,6 +171,7 @@ class DataCollectionPipeline:
         watchlist_tickers = [r for r in watchlist_res.scalars().all()]
         
         universe = list(set(PRICE_UNIVERSE_TICKERS) | set(kr_top_1000) | set(watchlist_tickers))
+        financial_insight_tickers = set(PRICE_UNIVERSE_TICKERS) | set(watchlist_tickers)
         total = len(universe)
         
         yield {"progress": 2, "message": "시장 지수 수집 중...", "status": "collecting"}
@@ -207,6 +209,12 @@ class DataCollectionPipeline:
                 stock.ai_score = None
                 stock.ai_recommendation = None
                 stock.ai_analysis = None
+
+                if ticker in financial_insight_tickers:
+                    try:
+                        await collect_business_insight_for_stock(db, stock)
+                    except Exception as e:
+                        errors.append(f"{ticker}: business insight failed ({e})")
 
                 # 뉴스 저장
                 for item in res.get("news", []):
@@ -288,6 +296,11 @@ class DataCollectionPipeline:
             stock.ai_score = None
             stock.ai_recommendation = None
             stock.ai_analysis = None
+
+            try:
+                await collect_business_insight_for_stock(db, stock)
+            except Exception as e:
+                errors.append(f"{ticker}: business insight failed ({e})")
 
             for item in res.get("news", []):
                 news_exists = await db.execute(
