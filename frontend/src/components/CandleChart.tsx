@@ -7,8 +7,8 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Line,
-  LineChart,
+  AreaChart,
+  Area,
 } from 'recharts';
 
 interface BarData {
@@ -36,8 +36,8 @@ const CustomTooltip = ({ active, payload }: any) => {
         <p className="mb-2 font-black text-neutral-400 uppercase">{data.trade_date}</p>
         <div className="space-y-2">
           <div className="flex justify-between gap-8">
-            <span className="text-neutral-500 font-bold">가격</span>
-            <span className={`font-black ${isUp ? 'text-red-600' : 'text-blue-600'}`}>
+            <span className="text-neutral-500 font-bold">종가</span>
+            <span className={`font-black ${isUp ? 'text-red-500' : 'text-blue-500'}`}>
               {data.close_price.toLocaleString()}원 ({changePct >= 0 ? '+' : ''}{changePct.toFixed(2)}%)
             </span>
           </div>
@@ -58,21 +58,15 @@ const CustomTooltip = ({ active, payload }: any) => {
 };
 
 export default function CandleChart({ data }: CandleChartProps) {
-  // 토스 스타일: 시고저종 바를 제거하고 깔끔한 선 차트와 이동평균선만 제공
-  const processedData = useMemo(() => {
-    if (!data || data.length === 0) return [];
-    
-    return data.map((d, i) => {
-      const ma5 = i >= 4 ? data.slice(i - 4, i + 1).reduce((acc, curr) => acc + curr.close_price, 0) / 5 : null;
-      const ma20 = i >= 19 ? data.slice(i - 19, i + 1).reduce((acc, curr) => acc + curr.close_price, 0) / 20 : null;
-      
-      return {
-        ...d,
-        ma5,
-        ma20,
-      };
-    });
+  // 전체적인 추세(상승/하락) 판단 (마지막 날 종가 vs 첫 날 시가)
+  const isTrendUp = useMemo(() => {
+    if (!data || data.length < 2) return true;
+    const firstPrice = data[0].close_price;
+    const lastPrice = data[data.length - 1].close_price;
+    return lastPrice >= firstPrice;
   }, [data]);
+
+  const trendColor = isTrendUp ? '#ef4444' : '#3b82f6'; // red-500, blue-500
 
   // Y축 자동 스케일링
   const { minPrice, maxPrice } = useMemo(() => {
@@ -90,10 +84,17 @@ export default function CandleChart({ data }: CandleChartProps) {
   return (
     <div className="h-[400px] w-full select-none">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart 
-          data={processedData} 
+        <AreaChart 
+          data={data} 
           margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
         >
+          <defs>
+            <linearGradient id="colorTrend" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={trendColor} stopOpacity={0.2}/>
+              <stop offset="95%" stopColor={trendColor} stopOpacity={0}/>
+            </linearGradient>
+          </defs>
+
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f5f5f5" />
           
           <XAxis 
@@ -116,40 +117,22 @@ export default function CandleChart({ data }: CandleChartProps) {
           
           <Tooltip 
             content={<CustomTooltip />} 
-            cursor={{ stroke: '#E5E5E5', strokeWidth: 1 }}
+            cursor={{ stroke: '#E5E5E5', strokeWidth: 1, strokeDasharray: '5 5' }}
           />
 
-          {/* 메인 가격 선 (토스 스타일) */}
-          <Line 
+          {/* 메인 가격 선 및 그라데이션 영역 */}
+          <Area 
             type="monotone" 
             dataKey="close_price" 
-            stroke="#171717" 
-            strokeWidth={3} 
-            dot={false}
-            activeDot={{ r: 6, strokeWidth: 0, fill: '#171717' }}
+            stroke={trendColor} 
+            strokeWidth={4} 
+            fillOpacity={1} 
+            fill="url(#colorTrend)" 
             isAnimationActive={false}
+            activeDot={{ r: 6, strokeWidth: 0, fill: trendColor }}
           />
           
-          {/* 이동평균선 (보조선) */}
-          <Line 
-            type="monotone" 
-            dataKey="ma5" 
-            stroke="#ef4444" 
-            dot={false} 
-            strokeWidth={1.5} 
-            opacity={0.5}
-            isAnimationActive={false}
-          />
-          <Line 
-            type="monotone" 
-            dataKey="ma20" 
-            stroke="#3b82f6" 
-            dot={false} 
-            strokeWidth={1.5} 
-            opacity={0.5}
-            isAnimationActive={false}
-          />
-        </LineChart>
+        </AreaChart>
       </ResponsiveContainer>
     </div>
   );

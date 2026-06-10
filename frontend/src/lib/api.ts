@@ -14,6 +14,9 @@ export const fetcher = (url: string) => apiClient.get(url).then((res) => res.dat
 export const collectMarketData = () =>
   apiClient.post('/report/collect').then((res) => res.data);
 
+export const fetchCollectStatus = () =>
+  apiClient.get('/report/collect-status').then((res) => res.data);
+
 export const generateReport = () =>
   apiClient.post('/report/generate').then((res) => res.data);
 

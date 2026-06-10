@@ -4,9 +4,61 @@ from sqlalchemy import select, desc, or_
 from typing import List, Optional
 from ..database import get_db
 from .. import models, schemas
+from ..services.business_insight_service import get_or_fetch_business_insight
 from ..services.report_pipeline import latest_trade_date
+from ..services.analyzer import AIAnalyzer
 
 router = APIRouter()
+
+@router.post("/{ticker}/analyze", response_model=schemas.Stock)
+async def analyze_single_stock(ticker: str, db: AsyncSession = Depends(get_db)):
+    # 1. DB에서 주식 정보 조회
+    result = await db.execute(select(models.Stock).where(models.Stock.ticker == ticker))
+    stock = result.scalars().first()
+    if not stock:
+        raise HTTPException(status_code=404, detail="Stock not found")
+        
+    # 2. 뉴스 목록 조회
+    news_result = await db.execute(
+        select(models.News)
+        .where(models.News.stock_id == stock.id)
+        .order_by(desc(models.News.published_at))
+        .limit(10)
+    )
+    news_items = news_result.scalars().all()
+    news_list = [{"title": n.title, "content": n.content, "published_at": n.published_at, "source": n.source} for n in news_items]
+    
+    # 3. 주식 데이터 직렬화
+    stock_data = {
+        "ticker": stock.ticker,
+        "name": stock.name,
+        "market": stock.market,
+        "current_price": stock.current_price,
+        "change_rate": stock.change_rate,
+        "change_amount": stock.change_amount,
+        "market_cap": stock.market_cap,
+        "per": stock.per,
+        "pbr": stock.pbr,
+        "roe": stock.roe,
+        "dividend_yield": stock.dividend_yield,
+        "business_insight": stock.business_insight,
+    }
+    
+    # 4. 분석기 호출
+    analyzer = AIAnalyzer()
+    analysis_result = await analyzer.analyze_stock(stock_data, news_list)
+    
+    if "error" in analysis_result:
+        raise HTTPException(status_code=503, detail=analysis_result["error"])
+        
+    # 5. 결과 저장
+    stock.ai_score = analysis_result.get("ai_score")
+    stock.ai_recommendation = analysis_result.get("ai_recommendation")
+    stock.ai_analysis = analysis_result.get("ai_analysis")
+    
+    await db.commit()
+    await db.refresh(stock)
+    return stock
 
 @router.get("/", response_model=List[schemas.Stock])
 async def get_stocks(db: AsyncSession = Depends(get_db)):
@@ -53,6 +105,18 @@ async def scan_stocks(
         
     result = await db.execute(query.limit(200)) # 표시 개수 확장
     return result.scalars().all()
+
+@router.get("/{ticker}/business-insight", response_model=schemas.BusinessInsightResponse)
+async def get_business_insight(
+    ticker: str,
+    refresh: bool = Query(False, description="Force refresh financial data"),
+    db: AsyncSession = Depends(get_db),
+):
+    insight = await get_or_fetch_business_insight(db, ticker, force_refresh=refresh)
+    if insight.get("status") == "not_found":
+        raise HTTPException(status_code=404, detail="Stock not found")
+    return insight
+
 
 @router.get("/{ticker}", response_model=schemas.Stock)
 async def get_stock(ticker: str, db: AsyncSession = Depends(get_db)):

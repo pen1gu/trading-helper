@@ -1,95 +1,81 @@
 'use client';
 
-import { useState } from 'react';
-import { ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import { ExternalLink, Clock, Hash } from 'lucide-react';
+import { formatDate } from '@/lib/format';
 
 interface NewsCardProps {
   news: {
     id: number;
     title: string;
-    summary: string;
-    content: string;
+    summary?: string | null;
+    content?: string | null;
     url: string;
     source: string;
     published_at: string;
-    sentiment_score: number;
-    hot_keywords: string[];
+    sentiment_score?: number | null;
+    hot_keywords?: string[] | null;
   };
 }
 
 export default function NewsCard({ news }: NewsCardProps) {
-  const [isOpen, setIsOpen] = useState(false);
-
   const getSentimentStyle = (score: number) => {
-    if (score >= 70) return 'bg-neutral-900 text-white border-neutral-900';
-    if (score <= 40) return 'bg-neutral-200 text-neutral-600 border-neutral-300';
-    return 'bg-neutral-100 text-neutral-600 border-neutral-200';
+    if (score >= 70) return 'text-indigo-600 bg-indigo-50';
+    if (score <= 40) return 'text-slate-500 bg-slate-100';
+    return 'text-slate-700 bg-white border border-slate-200';
   };
 
   return (
-    <div className="card-modern overflow-hidden transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
-      <div
-        className="flex cursor-pointer items-start justify-between gap-4 p-5"
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        <div className="flex-1">
-          <div className="mb-2 flex items-center gap-2">
-            <span
-              className={`rounded-full border px-2.5 py-1 text-xs font-bold ${getSentimentStyle(news.sentiment_score)}`}
-            >
-              {news.sentiment_score}점
-            </span>
-            <span className="text-xs font-medium text-neutral-400">
-              {news.source} •{' '}
-              {new Date(news.published_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-            </span>
+    <div className="group relative flex flex-col rounded-[24px] border border-slate-200 bg-white p-6 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.04)] transition-all hover:border-indigo-200 hover:shadow-[0_8px_32px_-4px_rgba(79,70,229,0.1)] hover:-translate-y-1">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">{news.source}</span>
+          <div className="h-1 w-1 rounded-full bg-slate-200" />
+          <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400">
+            <Clock size={10} />
+            <span>{formatDate(news.published_at, 'YYYY-MM-DD HH:mm')}</span>
           </div>
-          <h3 className="text-lg font-semibold leading-tight text-neutral-900">{news.title}</h3>
         </div>
-        <div className="mt-1 text-neutral-400">
-          {isOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-        </div>
+        
+        {news.sentiment_score != null && (
+          <div className={`rounded-lg px-2 py-0.5 text-[10px] font-black ${getSentimentStyle(news.sentiment_score)}`}>
+            {news.sentiment_score}pt
+          </div>
+        )}
       </div>
 
-      {isOpen && (
-        <div className="border-t border-neutral-100 bg-neutral-50 px-5 pb-5">
-          <div className="space-y-4 pt-4">
-            <div>
-              <h4 className="mb-1 text-xs font-bold uppercase tracking-wider text-neutral-500">AI 3줄 요약</h4>
-              <p className="text-sm font-medium leading-relaxed text-neutral-600">
-                {news.summary || '요약 정보가 없습니다.'}
-              </p>
-            </div>
+      <a 
+        href={news.url} 
+        target="_blank" 
+        rel="noreferrer"
+        className="mb-6 block"
+      >
+        <h3 className="text-lg font-bold leading-snug text-slate-900 group-hover:text-indigo-600 transition-colors line-clamp-2">
+          {news.title}
+        </h3>
+      </a>
 
-            {news.hot_keywords && news.hot_keywords.length > 0 && (
-              <div>
-                <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-neutral-400">핫 키워드</h4>
-                <div className="flex flex-wrap gap-2">
-                  {news.hot_keywords.map((kw, idx) => (
-                    <span
-                      key={idx}
-                      className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs text-neutral-600"
-                    >
-                      #{kw}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-end pt-2">
-              <a
-                href={news.url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center text-xs font-semibold text-neutral-900 underline-offset-2 transition-colors hover:underline"
-              >
-                원문 보기 <ExternalLink size={14} className="ml-1" />
-              </a>
-            </div>
-          </div>
+      <div className="mt-auto flex items-center justify-between gap-4">
+        <div className="flex flex-wrap gap-1.5">
+          {news.hot_keywords?.slice(0, 3).map((kw, idx) => (
+            <span
+              key={idx}
+              className="flex items-center gap-0.5 rounded-full bg-slate-50 px-2.5 py-1 text-[10px] font-bold text-slate-500"
+            >
+              <Hash size={8} className="text-slate-300" />
+              {kw}
+            </span>
+          ))}
         </div>
-      )}
+        
+        <a
+          href={news.url}
+          target="_blank"
+          rel="noreferrer"
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400 transition-all hover:bg-indigo-600 hover:text-white"
+        >
+          <ExternalLink size={14} />
+        </a>
+      </div>
     </div>
   );
 }

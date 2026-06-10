@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import models
+
+KST = timezone(timedelta(hours=9))
 
 
 STOCK_SCALAR_FIELDS = [
@@ -120,7 +122,7 @@ async def get_or_create_stock(db: AsyncSession, data: Dict[str, Any]) -> models.
         "fifty_two_week_low",
         "avg_volume_10d",
     ):
-        if field in data:
+        if field in data and data.get(field) is not None:
             setattr(stock, field, data.get(field))
     return stock
 
@@ -152,7 +154,7 @@ async def upsert_daily_bars(
             "quote_source",
         ):
             setattr(bar, field, item.get(field))
-        bar.collected_at = datetime.now().astimezone()
+        bar.collected_at = datetime.now(KST)
     await db.flush()
 
 
@@ -193,7 +195,7 @@ async def recompute_stock_features(
         latest.open_price,
     )
     stock.quote_source = latest.quote_source or stock.quote_source
-    stock.data_collected_at = collected_at or datetime.now().astimezone()
+    stock.data_collected_at = collected_at or datetime.now(KST)
 
     historical = bars[:-1]
     for window in (5, 20, 60):

@@ -8,7 +8,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import models
 from ..logging_config import task_logger
+from .business_insight_service import _is_cache_valid, collect_business_insight_for_stock
 from .feature_store import build_analysis_context, collect_stock_features
+from .news_crawl_service import (
+    NewsCrawlContext,
+    NewsCrawlMode,
+    count_skip_tickers,
+    load_news_crawl_contexts,
+    mark_news_collected,
+)
 from .notifier import DiscordNotifier
 from .watchlist import (
     MAX_PICKS,
@@ -133,21 +141,199 @@ async def latest_trade_date_stocks(db: AsyncSession) -> List[models.Stock]:
     return list(result.scalars().all())
 
 
-def _fetch_ticker_sync(collector, ticker: str) -> Dict[str, Any]:
-    """네트워크 호출만 수행하는 동기 헬퍼 (스레드에서 실행용)"""
+async def _get_last_bar_date(db: AsyncSession, ticker: str) -> Optional[str]:
+    """해당 종목의 가장 최근 일봉 날짜를 반환합니다 (YYYY-MM-DD)."""
+    result = await db.execute(
+        select(models.StockDailyBar.trade_date)
+        .join(models.Stock, models.Stock.id == models.StockDailyBar.stock_id)
+        .where(models.Stock.ticker == ticker)
+        .order_by(models.StockDailyBar.trade_date.desc())
+        .limit(1)
+    )
+    last_date = result.scalar_one_or_none()
+    return last_date.isoformat() if last_date else None
+
+
+async def _fetch_ticker_async(
+    db: AsyncSession,
+    collector,
+    ticker: str,
+    news_ctx: Optional[NewsCrawlContext] = None,
+) -> Dict[str, Any]:
+    """비동기 DB 조회 후 동기 수집 호출 (증분 업데이트 지원)."""
+    from .news_crawler import fetch_stock_news_if_needed
+
+    ctx = news_ctx or NewsCrawlContext(mode=NewsCrawlMode.FETCH)
+    
+    # DB에서 가장 최근 일봉 날짜 조회
+    last_date = await _get_last_bar_date(db, ticker)
+    start_date = None
+    if last_date:
+        # 마지막 날짜 다음 날부터 가져오기 위해 1일 추가
+        dt = date.fromisoformat(last_date) + timedelta(days=1)
+        start_date = dt.isoformat()
+
     try:
-        if ticker.isdigit():
-            data = collector.get_kr_stock_data(ticker)
-        else:
-            data = collector.get_us_stock_data(ticker)
+        # 네트워크 호출은 thread pool에서 실행
+        data = await asyncio.to_thread(
+            collector.fetch_stock_data, ticker, start_date=start_date
+        )
 
         if not data or not data.get("daily_bars"):
+            # 증분 업데이트 시 새 데이터가 없는 것은 에러가 아님
+            if start_date:
+                return {"ticker": ticker, "data": {"daily_bars": []}, "news": [], "news_skipped": True, "incremental": True}
             return {"ticker": ticker, "error": "quote data unavailable"}
 
-        news = collector.get_stock_news(ticker, data.get("name") or ticker)
-        return {"ticker": ticker, "data": data, "news": news}
+        # 뉴스는 항상 최신으로 가져옴 (news_ctx가 제어)
+        news = await asyncio.to_thread(
+            fetch_stock_news_if_needed, ctx, ticker, data.get("name") or ticker
+        )
+        return {
+            "ticker": ticker,
+            "data": data,
+            "news": news,
+            "news_skipped": ctx.mode == NewsCrawlMode.SKIP,
+            "incremental": bool(start_date),
+        }
     except Exception as e:
         return {"ticker": ticker, "error": str(e)}
+
+
+async def _save_news_items(
+    db: AsyncSession,
+    stock: models.Stock,
+    news_items: List[Dict[str, Any]],
+) -> int:
+    saved = 0
+    for item in news_items:
+        news_exists = await db.execute(
+            select(models.News).where(models.News.url == item["url"])
+        )
+        if news_exists.scalars().first():
+            continue
+        db.add(
+            models.News(
+                stock_id=stock.id,
+                title=item["title"],
+                content=item.get("content"),
+                url=item["url"],
+                source=item.get("source"),
+                published_at=item.get("published_at"),
+                summary=item.get("summary"),
+                hot_keywords=item.get("hot_keywords"),
+            )
+        )
+        saved += 1
+    return saved
+
+
+async def _persist_quote_and_news(
+    db: AsyncSession,
+    fetch_results: List[Dict[str, Any]],
+    collected_at: datetime,
+) -> Tuple[int, List[str], List[models.Stock], int, int]:
+    """시세·뉴스 저장. (성공수, errors, stocks, 신규뉴스수, 뉴스스킵수) 반환."""
+    processed_count = 0
+    errors: List[str] = []
+    saved_stocks: List[models.Stock] = []
+    new_news_count = 0
+    news_skip_count = 0
+
+    for res in fetch_results:
+        ticker = res["ticker"]
+        if "error" in res:
+            errors.append(f"{ticker}: {res['error']}")
+            continue
+
+        data = res["data"]
+        stock = await collect_stock_features(db, data, collected_at=collected_at)
+        if stock is None:
+            errors.append(f"{ticker}: feature collection failed")
+            continue
+
+        stock.ai_score = None
+        stock.ai_recommendation = None
+        stock.ai_analysis = None
+
+        if res.get("news_skipped"):
+            news_skip_count += 1
+        else:
+            new_news_count += await _save_news_items(db, stock, res.get("news", []))
+            mark_news_collected(stock, collected_at)
+
+        saved_stocks.append(stock)
+        processed_count += 1
+
+    return processed_count, errors, saved_stocks, new_news_count, news_skip_count
+
+
+async def _build_universe(db: AsyncSession, collector) -> List[str]:
+    """KR Top 1000 + PRICE_UNIVERSE + watchlist 유니버스."""
+    kr_top_1000 = await asyncio.to_thread(collector.get_top_tickers, "KR", 1000)
+    watchlist_res = await db.execute(select(models.Watchlist.ticker))
+    watchlist_tickers = [r for r in watchlist_res.scalars().all()]
+    return list(set(PRICE_UNIVERSE_TICKERS) | set(kr_top_1000) | set(watchlist_tickers))
+
+
+async def _collect_ticker_batch(
+    db: AsyncSession,
+    collector,
+    universe: List[str],
+    collected_at: datetime,
+) -> Dict[str, Any]:
+    """2-phase 수집: fetch → save (재무 분석은 InsightCollectionPipeline에서 별도 실행)."""
+    total = len(universe)
+    indices = collector.get_market_indices()
+    news_contexts = await load_news_crawl_contexts(db, universe)
+    skip_count = count_skip_tickers(news_contexts)
+
+    semaphore = asyncio.Semaphore(15)
+
+    async def bounded_fetch(ticker: str):
+        async with semaphore:
+            ctx = news_contexts.get(ticker)
+            return await _fetch_ticker_async(db, collector, ticker, ctx)
+
+    task_logger.info(
+        "collect.fetching_data_parallel started tickers=%d news_skip=%d",
+        total,
+        skip_count,
+    )
+    fetch_results = await asyncio.gather(*(bounded_fetch(t) for t in universe))
+    task_logger.info("collect.fetching_data_parallel completed")
+
+    (
+        processed_count,
+        errors,
+        saved_stocks,
+        new_news_count,
+        news_skip_count,
+    ) = await _persist_quote_and_news(db, fetch_results, collected_at)
+    await db.commit()
+
+    report_result = await db.execute(select(models.MarketReport).limit(1))
+    report = report_result.scalars().first()
+    if report:
+        report.indices = indices
+        report.data_collected_at = collected_at
+        report.updated_at = collected_at
+    else:
+        report = models.MarketReport(
+            indices=indices,
+            data_collected_at=collected_at,
+            updated_at=collected_at,
+        )
+        db.add(report)
+    await db.commit()
+
+    return {
+        "processed_count": processed_count,
+        "errors": errors,
+        "indices": indices,
+        "new_news_count": new_news_count,
+        "news_skip_count": news_skip_count,
+    }
 
 
 class DataCollectionPipeline:
@@ -156,195 +342,363 @@ class DataCollectionPipeline:
 
         self.collector = DataCollector()
 
-    async def run_stream(self, db: AsyncSession):
-        """실시간 진행률을 yield하는 비동기 수집 파이프라인"""
+    async def run_stream(self, db: AsyncSession, target: str = "all"):
+        """실시간 진행률을 yield하는 비동기 수집 파이프라인
+        target: all | market | news
+        """
         started = time.perf_counter()
-        
+
+        collect_market = target in ("all", "market")
+        collect_news = target in ("all", "news")
+
         yield {"progress": 0, "message": "상위 1000종목 리스트 추출 중...", "status": "collecting"}
-        
-        # 1. 국내 상위 1000종목 동적 추출
-        kr_top_1000 = await asyncio.to_thread(self.collector.get_top_tickers, "KR", 1000)
-        
-        # 2. 기본 유니버스(미국 위주) + 국내 1000 + 관심 종목 합치기
-        watchlist_res = await db.execute(select(models.Watchlist.ticker))
-        watchlist_tickers = [r for r in watchlist_res.scalars().all()]
-        
-        universe = list(set(PRICE_UNIVERSE_TICKERS) | set(kr_top_1000) | set(watchlist_tickers))
+        universe = await _build_universe(db, self.collector)
         total = len(universe)
+
+        indices = []
+        if collect_market:
+            yield {"progress": 2, "message": "시장 지수 수집 중...", "status": "collecting"}
+            indices = self.collector.get_market_indices()
         
-        yield {"progress": 2, "message": "시장 지수 수집 중...", "status": "collecting"}
-        indices = self.collector.get_market_indices()
+        # 현재 시간을 KST로 고정
         collected_at = datetime.now(KST)
 
         processed_count = 0
-        errors = []
+        errors: List[str] = []
+        saved_stocks: List[models.Stock] = []
+        new_news_count = 0
+        news_skip_count = 0
 
-        # 1. 병렬 페치 단계
+        news_contexts = {}
+        if collect_news:
+            news_contexts = await load_news_crawl_contexts(db, universe)
+        
+        skip_count = count_skip_tickers(news_contexts)
+
         semaphore = asyncio.Semaphore(15)
+
         async def bounded_fetch(ticker: str):
             async with semaphore:
-                return await asyncio.to_thread(_fetch_ticker_sync, self.collector, ticker)
+                # collect_news가 아니면 ctx는 None
+                ctx = news_contexts.get(ticker) if collect_news else NewsCrawlContext(mode=NewsCrawlMode.SKIP)
+                return await _fetch_ticker_async(db, self.collector, ticker, ctx)
 
-        yield {"progress": 5, "message": f"총 {total}개 종목 데이터 페치 시작...", "status": "collecting"}
-        fetch_results = await asyncio.gather(*(bounded_fetch(t) for t in universe))
+        msg = f"총 {total}개 종목 "
+        if collect_market and collect_news:
+            msg += f"시세·뉴스 페치 시작 (뉴스 스킵 {skip_count}종목)..."
+        elif collect_market:
+            msg += "시세 데이터 페치 시작..."
+        else:
+            msg += f"뉴스 데이터 페치 시작 (스킵 {skip_count}종목)..."
 
-        # 2. 순차 DB 저장 단계 및 실시간 진행률 yield
+        yield {
+            "progress": 5,
+            "message": msg,
+            "status": "collecting",
+        }
+        
+        fetch_tasks = [asyncio.create_task(bounded_fetch(t)) for t in universe]
+        fetch_results = []
+        for i, coro in enumerate(asyncio.as_completed(fetch_tasks), start=1):
+            res = await coro
+            fetch_results.append(res)
+            if i % 10 == 0 or i == total:
+                progress = int(5 + (i / total) * 60)
+                yield {
+                    "progress": progress,
+                    "message": f"시세·뉴스 페치 중... ({i}/{total})",
+                    "status": "collecting",
+                }
+
+        yield {"progress": 65, "message": "데이터 페치 완료, DB 저장 중...", "status": "collecting"}
+
+        incremental_count = 0
         for i, res in enumerate(fetch_results, start=1):
             ticker = res["ticker"]
-            progress = int(5 + (i / total) * 90) # 5%~95% 구간
-            
+            progress = int(65 + (i / total) * 15)
+
             if "error" in res:
                 errors.append(f"{ticker}: {res['error']}")
-                yield {"progress": progress, "message": f"{ticker} 수집 실패: {res['error']}", "status": "collecting"}
+                continue
+            
+            if res.get("incremental"):
+                incremental_count += 1
+
+            data = res["data"]
+            # 시세 업데이트 여부와 상관없이 Stock 객체는 가져와야 함 (뉴스 저장 위해)
+            stock = await collect_stock_features(db, data, collected_at=collected_at if collect_market else None)
+            if stock is None:
+                errors.append(f"{ticker}: feature collection failed")
                 continue
 
-            yield {"progress": progress, "message": f"{res['data'].get('name', ticker)} 저장 중...", "status": "collecting"}
-            
-            data = res["data"]
-            stock = await collect_stock_features(db, data, collected_at=collected_at)
-            if stock:
-                # AI 분석 초기화
+            if collect_market:
                 stock.ai_score = None
                 stock.ai_recommendation = None
                 stock.ai_analysis = None
 
-                # 뉴스 저장
-                for item in res.get("news", []):
-                    news_exists = await db.execute(
-                        select(models.News).where(models.News.url == item["url"])
-                    )
-                    if not news_exists.scalars().first():
-                        db.add(models.News(
-                            stock_id=stock.id,
-                            title=item["title"],
-                            content=item.get("content"),
-                            url=item["url"],
-                            source=item.get("source"),
-                            published_at=item.get("published_at"),
-                        ))
-                processed_count += 1
-            else:
-                errors.append(f"{ticker}: feature collection failed")
+            if collect_news:
+                if res.get("news_skipped"):
+                    news_skip_count += 1
+                else:
+                    new_news_count += await _save_news_items(db, stock, res.get("news", []))
+                    mark_news_collected(stock, collected_at)
 
-            if i % 10 == 0 or i == total:
+            saved_stocks.append(stock)
+            processed_count += 1
+
+            if i % 20 == 0 or i == total:
                 await db.commit()
 
-        # 리포트 메타데이터 업데이트
+        yield {"progress": 80, "message": "수집 완료 처리 중...", "status": "collecting"}
+
         report_result = await db.execute(select(models.MarketReport).limit(1))
         report = report_result.scalars().first()
         if not report:
             report = models.MarketReport()
             db.add(report)
+
+        if collect_market:
+            report.indices = indices
+            report.data_collected_at = collected_at
         
-        report.indices = indices
-        report.data_collected_at = collected_at
         report.updated_at = collected_at
         await db.commit()
 
         elapsed = time.perf_counter() - started
+        
+        final_msg = "수집 완료! "
+        if collect_market:
+            final_msg += f"시세 {processed_count}개(증분 {incremental_count}개), "
+        if collect_news:
+            final_msg += f"뉴스 신규 {new_news_count}건 (스킵 {news_skip_count}), "
+        final_msg += f"{len(errors)}개 실패, {elapsed:.1f}초"
+
         yield {
-            "progress": 100, 
-            "message": f"수집 완료! ({processed_count}개 성공, {len(errors)}개 실패, {elapsed:.1f}초)", 
+            "progress": 100,
+            "message": final_msg,
             "status": "done",
-            "processed_count": processed_count
+            "processed_count": processed_count,
         }
 
     async def run(self, db: AsyncSession) -> Dict[str, Any]:
         started = time.perf_counter()
-        universe = list(PRICE_UNIVERSE_TICKERS)
+        universe = await _build_universe(db, self.collector)
         task_logger.info("collect.start tickers=%d", len(universe))
 
         collected_at = datetime.now(KST)
-        indices = self.collector.get_market_indices()
-        task_logger.info("collect.indices fetched=%d", len(indices or []))
+        result = await _collect_ticker_batch(db, self.collector, universe, collected_at)
 
-        # 1. 병렬 페치 단계 (Semaphore로 동시성 제어)
-        semaphore = asyncio.Semaphore(15)
-
-        async def bounded_fetch(ticker: str):
-            async with semaphore:
-                return await asyncio.to_thread(_fetch_ticker_sync, self.collector, ticker)
-
-        task_logger.info("collect.fetching_data_parallel started")
-        fetch_results = await asyncio.gather(*(bounded_fetch(t) for t in universe))
-        task_logger.info("collect.fetching_data_parallel completed")
-
-        # 2. 순차 DB 저장 단계
-        processed_count = 0
-        errors: List[str] = []
-
-        for i, res in enumerate(fetch_results, start=1):
-            ticker = res["ticker"]
-            if "error" in res:
-                errors.append(f"{ticker}: {res['error']}")
-                continue
-
-            data = res["data"]
-            stock = await collect_stock_features(db, data, collected_at=collected_at)
-            if stock is None:
-                errors.append(f"{ticker}: no daily bars after collect")
-                continue
-
-            stock.ai_score = None
-            stock.ai_recommendation = None
-            stock.ai_analysis = None
-
-            for item in res.get("news", []):
-                news_exists = await db.execute(
-                    select(models.News).where(models.News.url == item["url"])
-                )
-                if news_exists.scalars().first():
-                    continue
-
-                db.add(
-                    models.News(
-                        stock_id=stock.id,
-                        title=item["title"],
-                        content=item.get("content"),
-                        url=item["url"],
-                        source=item.get("source"),
-                        published_at=item.get("published_at"),
-                    )
-                )
-            processed_count += 1
-
-            if i % 25 == 0 or i == len(fetch_results):
-                task_logger.info(
-                    "collect.db_save_progress %d/%d ok=%d skipped=%d",
-                    i,
-                    len(fetch_results),
-                    processed_count,
-                    len(errors),
-                )
-
-        report_result = await db.execute(select(models.MarketReport).limit(1))
-        report = report_result.scalars().first()
-        if report:
-            report.indices = indices
-            report.data_collected_at = collected_at
-            report.updated_at = collected_at
-        else:
-            report = models.MarketReport(
-                indices=indices,
-                data_collected_at=collected_at,
-                updated_at=collected_at,
-            )
-            db.add(report)
-
-        await db.commit()
         elapsed = time.perf_counter() - started
         task_logger.info(
             "collect.done processed=%d errors=%d duration=%.1fs",
-            processed_count,
-            len(errors),
+            result["processed_count"],
+            len(result["errors"]),
             elapsed,
         )
         return {
             "message": "데이터 불러오기가 완료되었습니다.",
             "collected_at": collected_at.isoformat(),
-            "processed_count": processed_count,
-            "errors": errors,
+            "processed_count": result["processed_count"],
+            "errors": result["errors"],
         }
+
+
+async def _resolve_insight_stocks(
+    db: AsyncSession,
+    collector,
+    scope: str,
+) -> List[models.Stock]:
+    if scope == "watchlist":
+        result = await db.execute(
+            select(models.Stock)
+            .join(models.Watchlist, models.Stock.ticker == models.Watchlist.ticker)
+        )
+        return list(result.scalars().all())
+
+    universe = await _build_universe(db, collector)
+    result = await db.execute(
+        select(models.Stock).where(models.Stock.ticker.in_(universe))
+    )
+    stocks_by_ticker = {s.ticker: s for s in result.scalars().all()}
+    missing = [t for t in universe if t not in stocks_by_ticker]
+    for ticker in missing:
+        stock = models.Stock(ticker=ticker)
+        db.add(stock)
+        stocks_by_ticker[ticker] = stock
+    if missing:
+        await db.flush()
+    return [stocks_by_ticker[t] for t in universe if t in stocks_by_ticker]
+
+
+class InsightCollectionPipeline:
+    """관심종목 또는 전체 유니버스 재무·사업 분석 (DART/SEC)."""
+
+    def __init__(self):
+        from .collector import DataCollector
+
+        self.collector = DataCollector()
+
+    async def run_stream(self, db: AsyncSession, scope: str = "watchlist"):
+        started = time.perf_counter()
+        scope_label = "관심종목" if scope == "watchlist" else "전체 유니버스"
+
+        yield {
+            "progress": 0,
+            "stage": "financial_analysis",
+            "message": f"{scope_label} 목록 조회 중...",
+            "status": "running",
+        }
+
+        stocks = await _resolve_insight_stocks(db, self.collector, scope)
+        pending = [s for s in stocks if not _is_cache_valid(s)]
+        total = len(pending)
+        skipped = len(stocks) - total
+
+        if total == 0:
+            yield {
+                "progress": 100,
+                "stage": "financial_analysis",
+                "message": f"분석 대상 없음 (캐시 유효 {skipped}종목)",
+                "status": "done",
+                "done_count": 0,
+                "total": 0,
+                "skipped_count": skipped,
+            }
+            return
+
+        yield {
+            "progress": 5,
+            "stage": "financial_analysis",
+            "message": f"재무·사업 분석 시작 ({total}종목, 캐시 스킵 {skipped}종목)...",
+            "status": "running",
+            "done_count": 0,
+            "total": total,
+            "skipped_count": skipped,
+        }
+
+        errors: List[str] = []
+        done_count = 0
+        semaphore = asyncio.Semaphore(2)
+
+        async def _one(stock: models.Stock) -> None:
+            nonlocal done_count
+            async with semaphore:
+                try:
+                    await collect_business_insight_for_stock(db, stock)
+                except Exception as e:
+                    errors.append(f"{stock.ticker}: business insight failed ({e})")
+                done_count += 1
+
+        tasks = [asyncio.create_task(_one(s)) for s in pending]
+        for coro in asyncio.as_completed(tasks):
+            await coro
+            progress = int(5 + (done_count / total) * 90)
+            current = pending[min(done_count, total - 1)] if pending else None
+            ticker_label = current.ticker if current else ""
+            yield {
+                "progress": progress,
+                "stage": "financial_analysis",
+                "message": f"재무·사업 분석 중... {ticker_label} ({done_count}/{total})",
+                "status": "running",
+                "done_count": done_count,
+                "total": total,
+            }
+
+        await db.commit()
+        elapsed = time.perf_counter() - started
+        yield {
+            "progress": 100,
+            "stage": "financial_analysis",
+            "message": f"재무·사업 분석 완료! {done_count}종목, {len(errors)}개 실패, {elapsed:.1f}초",
+            "status": "done",
+            "done_count": done_count,
+            "total": total,
+            "skipped_count": skipped,
+            "errors": errors[:10],
+        }
+
+
+async def build_collect_status(db: AsyncSession, collector) -> Dict[str, Any]:
+    """데이터 로딩 페이지용 수집 현황 집계."""
+    from sqlalchemy import func
+
+    report_result = await db.execute(
+        select(models.MarketReport).order_by(models.MarketReport.updated_at.desc()).limit(1)
+    )
+    report = report_result.scalars().first()
+
+    trade_date = await latest_trade_date(db)
+
+    stock_count_result = await db.execute(
+        select(func.count()).select_from(models.Stock).where(
+            models.Stock.change_rate.isnot(None)
+        )
+    )
+    stock_count = stock_count_result.scalar() or 0
+
+    universe = await _build_universe(db, collector)
+
+    news_max_result = await db.execute(
+        select(func.max(models.Stock.news_collected_at))
+    )
+    news_last = news_max_result.scalar()
+
+    news_total_result = await db.execute(select(func.count()).select_from(models.News))
+    news_total = news_total_result.scalar() or 0
+
+    stocks_with_news_result = await db.execute(
+        select(func.count(func.distinct(models.News.stock_id))).where(
+            models.News.stock_id.isnot(None)
+        )
+    )
+    stocks_with_news = stocks_with_news_result.scalar() or 0
+
+    fin_max_result = await db.execute(
+        select(func.max(models.Stock.financials_collected_at))
+    )
+    fin_last = fin_max_result.scalar()
+
+    analyzed_result = await db.execute(
+        select(func.count()).select_from(models.Stock).where(
+            models.Stock.business_insight.isnot(None)
+        )
+    )
+    analyzed_count = analyzed_result.scalar() or 0
+
+    watchlist_result = await db.execute(
+        select(models.Stock)
+        .join(models.Watchlist, models.Stock.ticker == models.Watchlist.ticker)
+    )
+    watchlist_stocks = list(watchlist_result.scalars().all())
+    watchlist_total = len(watchlist_stocks)
+    watchlist_analyzed = sum(
+        1 for s in watchlist_stocks if s.business_insight is not None
+    )
+
+    return {
+        "market": {
+            "last_collected_at": report.data_collected_at if report else None,
+            "trade_date": trade_date,
+            "stock_count": stock_count,
+            "universe_estimate": len(universe),
+        },
+        "news": {
+            "last_collected_at": news_last,
+            "total_articles": news_total,
+            "stocks_with_news": stocks_with_news,
+        },
+        "financials": {
+            "last_collected_at": fin_last,
+            "analyzed_count": analyzed_count,
+            "watchlist_analyzed": watchlist_analyzed,
+            "watchlist_total": watchlist_total,
+            "pending_watchlist": max(watchlist_total - watchlist_analyzed, 0),
+        },
+        "report": {
+            "last_generated_at": report.report_generated_at if report else None,
+            "next_refresh_at": report.next_refresh_at if report else None,
+        },
+    }
 
 
 class ReportGenerationPipeline:

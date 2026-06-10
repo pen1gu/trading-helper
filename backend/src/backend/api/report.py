@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timezone, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from .logging_utils import api_logger
@@ -12,8 +12,10 @@ from ..database import get_db
 from .. import models, schemas
 from ..services.report_pipeline import (
     DataCollectionPipeline,
+    InsightCollectionPipeline,
     ReportGenerationPipeline,
     ReportPipeline,
+    build_collect_status,
     extract_news_url,
     latest_trade_date,
     next_refresh_at_kst,
@@ -106,8 +108,12 @@ async def _build_daily_from_db(db: AsyncSession) -> schemas.DailyReportResponse:
     highlights_raw = report.highlights if report and report.highlights else DEFAULT_HIGHLIGHTS
     indices_raw = report.indices if report and report.indices else []
 
-    stock_times = [s.updated_at for s in stocks if s.updated_at]
-    updated_at = report.updated_at if report else (max(stock_times) if stock_times else now)
+    updated_at = report.updated_at if report else now
+    
+    # 주식 데이터에서 가장 최근 뉴스 수집 시간을 찾습니다.
+    news_times = [s.news_collected_at for s in stocks if s.news_collected_at]
+    news_collected_at = max(news_times) if news_times else None
+
     company_reports = []
     raw_company_reports = report.company_reports if report and report.company_reports else []
     for item in raw_company_reports:
@@ -119,13 +125,14 @@ async def _build_daily_from_db(db: AsyncSession) -> schemas.DailyReportResponse:
         long_picks=long_picks,
         short_picks=short_picks,
         company_reports=company_reports,
-        data_source="live",
+        data_source="live" if stocks else "empty",
         indices=[schemas.MarketIndex(**idx) for idx in indices_raw] if indices_raw else [],
         updated_at=updated_at,
         next_refresh_at=report.next_refresh_at
         if report and report.next_refresh_at
         else next_refresh_at_kst(now),
-        data_collected_at=report.data_collected_at if report else None,
+        data_collected_at=report.data_collected_at if report else updated_at,
+        news_collected_at=news_collected_at,
         report_generated_at=report.report_generated_at if report else None,
     )
 
@@ -140,13 +147,50 @@ async def get_daily_report(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/collect-stream")
-async def collect_market_data_stream(db: AsyncSession = Depends(get_db)):
-    """실시간 수집 진행률을 SSE로 스트리밍합니다."""
+async def collect_market_data_stream(
+    target: str = "all",
+    db: AsyncSession = Depends(get_db)
+):
+    """실시간 수집 진행률을 SSE로 스트리밍합니다.
+    target: all | market | news
+    """
     pipeline = DataCollectionPipeline()
 
     async def event_generator():
-        async for progress_data in pipeline.run_stream(db):
+        async for progress_data in pipeline.run_stream(db, target=target):
             yield f"data: {json.dumps(progress_data, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.get("/collect-status", response_model=schemas.CollectStatusResponse)
+async def get_collect_status(db: AsyncSession = Depends(get_db)):
+    """데이터 로딩 페이지용 수집 현황."""
+    from ..services.collector import DataCollector
+
+    status = await build_collect_status(db, DataCollector())
+    return schemas.CollectStatusResponse(
+        market=schemas.MarketCollectStatus(**status["market"]),
+        news=schemas.NewsCollectStatus(**status["news"]),
+        financials=schemas.FinancialsCollectStatus(**status["financials"]),
+        report=schemas.ReportCollectStatus(**status["report"]),
+    )
+
+
+@router.get("/insight-stream")
+async def collect_insight_stream(
+    scope: str = Query("watchlist", description="watchlist | all"),
+    db: AsyncSession = Depends(get_db),
+):
+    """재무·사업 분석 진행률 SSE. scope=watchlist(관심종목) | all(전체 유니버스)."""
+    if scope not in ("watchlist", "all"):
+        raise HTTPException(status_code=400, detail="scope must be watchlist or all")
+
+    pipeline = InsightCollectionPipeline()
+
+    async def event_generator():
+        async for progress_data in pipeline.run_stream(db, scope=scope):
+            yield f"data: {json.dumps(progress_data, ensure_ascii=False, default=str)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

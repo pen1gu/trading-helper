@@ -29,6 +29,7 @@ def configure_logging() -> None:
 
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("yfinance").setLevel(logging.WARNING)
 
 
 def request_logging_middleware() -> Callable:

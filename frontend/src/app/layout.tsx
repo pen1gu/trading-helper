@@ -1,18 +1,7 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "StockInsight AI",
@@ -25,8 +14,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full bg-neutral-100 text-neutral-900">
+    <html lang="ko" className="h-full antialiased">
+      <body className="min-h-full bg-neutral-100 text-neutral-900 font-sans">
         <div className="app-bg-pattern" aria-hidden />
         <Sidebar />
         <div className="relative z-10 ml-[240px] min-h-screen">
