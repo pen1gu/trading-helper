@@ -15,9 +15,10 @@ class AIAnalyzer:
         api_key = os.getenv("GEMINI_API_KEY")
         self.model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
         if api_key:
+            masked_key = f"{api_key[:4]}...{api_key[-4:]}"
             genai.configure(api_key=api_key)
             self.model = genai.GenerativeModel(self.model_name)
-            task_logger.info("gemini.ready model=%s", self.model_name)
+            task_logger.info("gemini.ready model=%s key=%s", self.model_name, masked_key)
         else:
             self.model = None
             task_logger.warning("gemini.disabled GEMINI_API_KEY not set")
@@ -54,23 +55,25 @@ class AIAnalyzer:
             "fair_price_range": {{
                 "min": (숫자, 현재가와 펀더멘털 기반 매수 적정가 하단),
                 "max": (숫자, 현재가와 펀더멘털 기반 매수 적정가 상단),
-                "reason": "적정가 산출 근거 (1문장)"
+                "reason": "적정가 산출 근거. 과거 재무(PER/PBR 등)뿐만 아니라 최근 20일/60일 가격 모멘텀과 급등에 따른 '거품(Bubble)' 가능성을 반드시 반영하여 할인/할증 여부를 명시할 것 (1~2문장)"
             }},
             "ai_analysis": {{
                 "strengths": ["강점1", "강점2", "강점3"],
-                "weaknesses": ["약점1", "약점2", "약점3"],
+                "weaknesses": ["약점1 (거품이나 단기 과열 리스크가 있다면 반드시 포함할 것)", "약점2", "약점3"],
                 "radar_chart": {{
                     "profitability": (0~10),
                     "growth": (0~10),
-                    "valuation": (0~10),
+                    "valuation": (0~10, 고평가/거품일수록 낮은 점수 부여),
                     "stability": (0~10),
-                    "momentum": (0~10)
+                    "momentum": (0~10, 최근 가격 변동 및 뉴스 트렌드 반영)
                 }}
             }},
             "summary": "핵심 요약 3줄"
         }}
 
-        중요: 모든 퍼센테이지 수치는 소수점 3자리에서 반올림하여 2자리까지만 언급하세요.
+        중요:
+        1. 모든 퍼센테이지 수치는 소수점 3자리에서 반올림하여 2자리까지만 언급하세요.
+        2. 적정 주가(fair_price_range)를 산정할 때, 순수 가치투자 기준만 고집하지 마십시오. 최근 뉴스의 모멘텀, 테마성 급등, 20일/60일 고점 대비 현재가(과열 여부)를 종합적으로 고려하여 현재 시장 상황에 맞는 현실적인 적정가를 제시하세요. 거품이 끼어있다고 판단되면 현재가보다 낮은 적정가를 제시하고 그 이유를 적으세요.
         """
         
         try:

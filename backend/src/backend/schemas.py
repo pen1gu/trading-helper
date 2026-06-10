@@ -58,6 +58,7 @@ class StockBase(BaseModel):
     ai_analysis: Optional[Dict] = None
     business_insight: Optional[Dict] = None
     financials_collected_at: Optional[datetime] = None
+    news_collected_at: Optional[datetime] = None
 
 class StockCreate(StockBase):
     pass
@@ -176,6 +177,7 @@ class DailyReportResponse(BaseModel):
     updated_at: Optional[datetime] = None
     next_refresh_at: Optional[datetime] = None
     data_collected_at: Optional[datetime] = None
+    news_collected_at: Optional[datetime] = None
     report_generated_at: Optional[datetime] = None
 
 
@@ -192,11 +194,45 @@ class CollectReportResponse(BaseModel):
     errors: List[str] = []
 
 
+class MarketCollectStatus(BaseModel):
+    last_collected_at: Optional[datetime] = None
+    trade_date: Optional[date] = None
+    stock_count: int = 0
+    universe_estimate: int = 0
+
+
+class NewsCollectStatus(BaseModel):
+    last_collected_at: Optional[datetime] = None
+    total_articles: int = 0
+    stocks_with_news: int = 0
+
+
+class FinancialsCollectStatus(BaseModel):
+    last_collected_at: Optional[datetime] = None
+    analyzed_count: int = 0
+    watchlist_analyzed: int = 0
+    watchlist_total: int = 0
+    pending_watchlist: int = 0
+
+
+class ReportCollectStatus(BaseModel):
+    last_generated_at: Optional[datetime] = None
+    next_refresh_at: Optional[datetime] = None
+
+
+class CollectStatusResponse(BaseModel):
+    market: MarketCollectStatus
+    news: NewsCollectStatus
+    financials: FinancialsCollectStatus
+    report: ReportCollectStatus
+
+
 class BusinessInsightResponse(BaseModel):
     status: str
     moat_proxy: Optional[Dict] = None
     rd_efficiency: Optional[Dict] = None
     capital_allocation: Optional[Dict] = None
+    deep_value: Optional[Dict] = None
     data_years: Optional[List[int]] = None
     source: Optional[str] = None
     collected_at: Optional[str] = None
