@@ -30,6 +30,9 @@ export interface BusinessInsight {
   moat_proxy?: InsightMetric;
   rd_efficiency?: InsightMetric;
   capital_allocation?: InsightMetric;
+  deep_value?: {
+    ncav?: number;
+  };
   data_years?: number[];
   source?: string;
   collected_at?: string;
@@ -156,7 +159,7 @@ export default function BusinessInsightPanel({ data, isLoading }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <MetricCard icon={Shield} title="전환 비용 프록시" metric={data.moat_proxy}>
           <div className="space-y-1 text-[11px] text-neutral-600">
             {data.moat_proxy?.deferred_revenue_ratio != null && (
@@ -218,7 +221,7 @@ export default function BusinessInsightPanel({ data, isLoading }: Props) {
                   {profileLabels[data.capital_allocation.profile] || data.capital_allocation.profile}
                 </p>
               )}
-              {chartData.map((d) => (
+              {chartData.slice(0, 3).map((d) => (
                 <p key={d.key}>
                   <span
                     className="mr-1 inline-block h-2 w-2 rounded-full"
