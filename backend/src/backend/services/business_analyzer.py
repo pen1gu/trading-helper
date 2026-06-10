@@ -47,7 +47,7 @@ def _growth_volatility(rates: List[float]) -> float:
 
 class BusinessAnalyzer:
     @staticmethod
-    def compute(series: FinancialSeries) -> Dict[str, Any]:
+    def compute(series: FinancialSeries, market_cap: Optional[float] = None) -> Dict[str, Any]:
         annual = series.annual
         if not annual:
             return {
@@ -62,6 +62,7 @@ class BusinessAnalyzer:
         moat = BusinessAnalyzer._compute_moat_proxy(annual)
         rd_eff = BusinessAnalyzer._compute_rd_efficiency(annual)
         capital = BusinessAnalyzer._compute_capital_allocation(annual)
+        deep_value = BusinessAnalyzer._compute_deep_value_proxy(annual, market_cap)
 
         latest = annual[-1]
         if latest.rd_expense is None and latest.capex is None and latest.revenue:
@@ -75,11 +76,54 @@ class BusinessAnalyzer:
             "moat_proxy": moat,
             "rd_efficiency": rd_eff,
             "capital_allocation": capital,
+            "deep_value": deep_value,
             "data_years": [a.fiscal_year for a in annual],
             "source": series.source,
             "collected_at": (
                 series.collected_at.isoformat() if series.collected_at else None
             ),
+        }
+
+    @staticmethod
+    def _compute_deep_value_proxy(annual: List[AnnualFinancial], market_cap: Optional[float]) -> Dict[str, Any]:
+        latest = annual[-1]
+        ncav = None
+        if latest.current_assets is not None and latest.total_liabilities is not None:
+            ncav = latest.current_assets - latest.total_liabilities
+
+        nnwc = None
+        if latest.cash_and_equivalents is not None and latest.total_liabilities is not None:
+            # 보수적 청산가치 (NNWC 근사치): 현금 + (재고자산 * 0.5) - 총부채
+            # 매출채권 등을 생략한 아주 보수적인 현금 위주 청산가치
+            inv = latest.inventory or 0.0
+            nnwc = latest.cash_and_equivalents + (inv * 0.5) - latest.total_liabilities
+
+        ncav_ratio = None
+        if ncav is not None and market_cap and market_cap > 0:
+            ncav_ratio = ncav / market_cap
+
+        interpretation = "순유동자산가치(NCAV) 데이터를 확인할 수 없습니다."
+        if ncav_ratio is not None:
+            if ncav_ratio >= 1.5:
+                interpretation = "시가총액이 순유동자산의 2/3 이하로, 벤저민 그레이엄의 '담배꽁초' 기준에 완벽히 부합하는 극단적 저평가 상태입니다."
+            elif ncav_ratio >= 1.0:
+                interpretation = "시가총액이 순유동자산가치보다 낮습니다. 청산가치(NCAV) 관점에서 매력적인 딥 밸류(Deep Value) 구간입니다."
+            elif nnwc is not None and nnwc > market_cap:
+                interpretation = "순유동자산 대비 시총은 높으나, 현금성 자산 중심의 보수적 청산가치(NNWC 근사)가 시총을 상회하는 희귀한 현금 부자 기업입니다."
+            elif latest.cash_and_equivalents is not None and latest.cash_and_equivalents > market_cap:
+                interpretation = "회사가 보유한 현금이 시가총액보다 많습니다. 즉시 청산해도 주주에게 이익이 돌아가는 꽁초 주식일 가능성이 큽니다."
+            else:
+                interpretation = "시가총액이 순유동자산가치를 상회합니다. 그레이엄의 엄격한 담배꽁초(청산가치) 투자 기준에는 해당하지 않으며, 프리미엄을 받고 있습니다."
+
+        return {
+            "ncav": ncav,
+            "nnwc": nnwc,
+            "cash_and_equivalents": latest.cash_and_equivalents,
+            "inventory": latest.inventory,
+            "market_cap": market_cap,
+            "ncav_to_market_cap": round(ncav_ratio, 4) if ncav_ratio is not None else None,
+            "interpretation": interpretation,
+            "label": "청산가치 기반 딥밸류(NCAV/NNWC)",
         }
 
     @staticmethod
@@ -304,9 +348,9 @@ class BusinessAnalyzer:
         }
 
 
-def fetch_and_analyze(ticker: str) -> Dict[str, Any]:
+def fetch_and_analyze(ticker: str, market_cap: Optional[float] = None) -> Dict[str, Any]:
     from .financial_crawler import FinancialCrawler
 
     crawler = FinancialCrawler()
     series = crawler.fetch_annual_financials(ticker)
-    return BusinessAnalyzer.compute(series)
+    return BusinessAnalyzer.compute(series, market_cap)

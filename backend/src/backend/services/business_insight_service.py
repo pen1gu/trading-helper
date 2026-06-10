@@ -40,7 +40,7 @@ async def get_or_fetch_business_insight(
     if not force_refresh and _is_cache_valid(stock):
         return stock.business_insight
 
-    insight = await asyncio.to_thread(fetch_and_analyze, ticker)
+    insight = await asyncio.to_thread(fetch_and_analyze, ticker, stock.market_cap)
     stock.business_insight = insight
     stock.financials_collected_at = datetime.now(timezone.utc)
     await db.commit()
@@ -55,7 +55,7 @@ async def collect_business_insight_for_stock(
     if _is_cache_valid(stock):
         return stock.business_insight
 
-    insight = await asyncio.to_thread(fetch_and_analyze, stock.ticker)
+    insight = await asyncio.to_thread(fetch_and_analyze, stock.ticker, stock.market_cap)
     stock.business_insight = insight
     stock.financials_collected_at = datetime.now(timezone.utc)
     return insight

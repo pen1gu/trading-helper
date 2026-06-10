@@ -13,8 +13,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import requests
-import yfinance as yf
 from dotenv import load_dotenv
+
+from ..data.ticker_utils import is_kr_ticker
+from .yfinance_client import fetch_financial_statements
 
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
@@ -54,6 +56,11 @@ SEC_CONCEPTS: Dict[str, List[str]] = {
         "DeferredRevenue",
     ],
     "goodwill": ["Goodwill"],
+    "current_assets": ["AssetsCurrent"],
+    "total_liabilities": ["Liabilities"],
+    "cash_and_equivalents": ["CashAndCashEquivalentsAtCarryingValue", "Cash"],
+    "inventory": ["InventoryNet"],
+    "current_liabilities": ["LiabilitiesCurrent"],
     "operating_cash_flow": [
         "NetCashProvidedByUsedInOperatingActivities",
     ],
@@ -72,9 +79,27 @@ YF_FIELD_MAP: Dict[str, List[str]] = {
     "depreciation": ["Depreciation And Amortization", "Reconciled Depreciation"],
     "dividends": ["Cash Dividends Paid", "Common Stock Dividends Paid"],
     "buybacks": ["Repurchase Of Capital Stock", "Common Stock Payments"],
+    "current_assets": ["Total Current Assets", "Current Assets", "Assets Current"],
+    "total_liabilities": ["Total Liabilities Net Minority Interest", "Total Liabilities"],
+    "cash_and_equivalents": ["Cash And Cash Equivalents", "Cash Financial"],
+    "inventory": ["Inventory"],
+    "current_liabilities": ["Current Liabilities", "Total Current Liabilities"],
     "operating_cash_flow": ["Operating Cash Flow"],
     "debt_repayment": ["Repayment Of Debt", "Long Term Debt Payments"],
 }
+
+DART_EXACT_MATCH_FIELDS = frozenset(
+    {
+        "current_assets",
+        "total_liabilities",
+        "current_liabilities",
+        "cash_and_equivalents",
+        "inventory",
+        "revenue",
+        "gross_profit",
+        "operating_income",
+    }
+)
 
 DART_ACCOUNT_MAP: Dict[str, List[str]] = {
     "revenue": ["매출액", "수익(매출액)", "영업수익", "매출"],
@@ -92,6 +117,11 @@ DART_ACCOUNT_MAP: Dict[str, List[str]] = {
     "buybacks": ["자기주식의취득", "자기주식의 취득", "자기주식취득"],
     "contract_liabilities": ["계약부채", "선수금"],
     "goodwill": ["영업권"],
+    "current_assets": ["유동자산"],
+    "total_liabilities": ["부채총계"],
+    "cash_and_equivalents": ["현금및현금성자산", "현금 및 현금성자산"],
+    "inventory": ["재고자산"],
+    "current_liabilities": ["유동부채"],
     "operating_cash_flow": ["영업활동현금흐름", "영업활동으로인한현금흐름"],
     "debt_repayment": ["차입금의상환", "차입금의 상환", "사채의상환"],
 }
@@ -110,6 +140,11 @@ class AnnualFinancial:
     buybacks: Optional[float] = None
     contract_liabilities: Optional[float] = None
     goodwill: Optional[float] = None
+    current_assets: Optional[float] = None
+    total_liabilities: Optional[float] = None
+    cash_and_equivalents: Optional[float] = None
+    inventory: Optional[float] = None
+    current_liabilities: Optional[float] = None
     operating_cash_flow: Optional[float] = None
     debt_repayment: Optional[float] = None
 
@@ -135,6 +170,17 @@ class FinancialCrawler:
         self._last_request_at = time.time()
 
     @staticmethod
+    @staticmethod
+    def _dart_account_matches(
+        account_nm: str, field_name: str, names: List[str]
+    ) -> bool:
+        normalized = account_nm.replace(" ", "")
+        normalized_names = [name.replace(" ", "") for name in names]
+        if field_name in DART_EXACT_MATCH_FIELDS:
+            return normalized in normalized_names
+        return any(name in normalized for name in normalized_names)
+
+    @staticmethod
     def _safe_float(value: Any) -> Optional[float]:
         try:
             if value is None:
@@ -148,12 +194,8 @@ class FinancialCrawler:
         except (TypeError, ValueError):
             return None
 
-    @staticmethod
-    def is_kr_ticker(ticker: str) -> bool:
-        return ticker.isdigit()
-
     def fetch_annual_financials(self, ticker: str) -> FinancialSeries:
-        if self.is_kr_ticker(ticker):
+        if is_kr_ticker(ticker):
             series = self._fetch_kr(ticker)
             if series.annual:
                 return series
@@ -255,7 +297,7 @@ class FinancialCrawler:
                     if val is None:
                         continue
                     for field_name, names in DART_ACCOUNT_MAP.items():
-                        if any(name.replace(" ", "") in account_nm for name in names):
+                        if self._dart_account_matches(account_nm, field_name, names):
                             if field_name in ("dividends", "buybacks", "capex", "debt_repayment"):
                                 val = abs(val)
                             if field_name == "capex" and field_name in year_data.get(year, {}):
@@ -278,12 +320,8 @@ class FinancialCrawler:
 
     def _fetch_yfinance(self, ticker: str, suffix: str = "") -> FinancialSeries:
         symbol = f"{ticker}{suffix}" if suffix else ticker
-        try:
-            stock = yf.Ticker(symbol)
-            financials = stock.financials
-            cashflow = stock.cashflow
-            balance = stock.balance_sheet
-        except Exception:
+        financials, cashflow, balance = fetch_financial_statements(symbol)
+        if financials is None and cashflow is None and balance is None:
             return FinancialSeries(ticker=ticker, source="yfinance")
 
         year_data: Dict[int, Dict[str, float]] = {}
@@ -306,9 +344,18 @@ class FinancialCrawler:
                     year_data.setdefault(year, {})[field_name] = val
                 break
 
+        balance_fields = {
+            "current_assets",
+            "total_liabilities",
+            "cash_and_equivalents",
+            "inventory",
+            "current_liabilities",
+        }
         for field_name in YF_FIELD_MAP:
             extract_from_df(financials, field_name)
             extract_from_df(cashflow, field_name)
+            if field_name in balance_fields:
+                extract_from_df(balance, field_name)
 
         if balance is not None and not balance.empty:
             for col in balance.columns:
@@ -331,16 +378,25 @@ class FinancialCrawler:
 
     def _build_annual_list(self, year_data: Dict[int, Dict[str, float]]) -> List[AnnualFinancial]:
         years = sorted(year_data.keys(), reverse=True)
-        # revenue가 있는 연도 우선, 최근 5년
-        years_with_revenue = [y for y in years if year_data[y].get("revenue")]
-        if years_with_revenue:
-            years = years_with_revenue[:5]
-        else:
-            years = years[:5]
-        years = sorted(years)
+        if not years:
+            return []
+            
+        # Find the latest year that actually has meaningful fundamental data
+        latest_year = None
+        for y in years:
+            d = year_data[y]
+            if d.get("revenue") or d.get("current_assets") or d.get("total_liabilities") or d.get("operating_cash_flow"):
+                latest_year = y
+                break
+                
+        if latest_year is None:
+            latest_year = years[0]
+
+        target_years = list(range(latest_year - 4, latest_year + 1))
+        
         result: List[AnnualFinancial] = []
-        for year in years:
-            d = year_data[year]
+        for year in target_years:
+            d = year_data.get(year, {})
             result.append(
                 AnnualFinancial(
                     fiscal_year=year,
@@ -354,6 +410,11 @@ class FinancialCrawler:
                     buybacks=d.get("buybacks"),
                     contract_liabilities=d.get("contract_liabilities"),
                     goodwill=d.get("goodwill"),
+                    current_assets=d.get("current_assets"),
+                    total_liabilities=d.get("total_liabilities"),
+                    cash_and_equivalents=d.get("cash_and_equivalents"),
+                    inventory=d.get("inventory"),
+                    current_liabilities=d.get("current_liabilities"),
                     operating_cash_flow=d.get("operating_cash_flow"),
                     debt_repayment=d.get("debt_repayment"),
                 )
