@@ -78,6 +78,7 @@ class Stock(Base):
     ai_score = Column(Integer)  # 0~100
     ai_recommendation = Column(String) # Long, Short, Neutral
     ai_analysis = Column(JSON) # Strengths (수익성, 성장성, 저평가, 안정성, 모멘텀)
+    quant_analysis = Column(JSON) # 자체 휴리스틱 모델 분석 결과 (적정가 범위 등)
 
     # Business insight (rule-based, no AI)
     business_insight = Column(JSON)

@@ -7,6 +7,7 @@ from .. import models, schemas
 from ..services.business_insight_service import get_or_fetch_business_insight
 from ..services.report_pipeline import latest_trade_date
 from ..services.analyzer import AIAnalyzer
+from ..services.quant_analyzer import calculate_heuristic_fair_price
 
 router = APIRouter()
 
@@ -55,6 +56,9 @@ async def analyze_single_stock(ticker: str, db: AsyncSession = Depends(get_db)):
     stock.ai_score = analysis_result.get("ai_score")
     stock.ai_recommendation = analysis_result.get("ai_recommendation")
     stock.ai_analysis = analysis_result.get("ai_analysis")
+    
+    # 6. 자체 휴리스틱 모델 분석 추가
+    stock.quant_analysis = calculate_heuristic_fair_price(stock)
     
     await db.commit()
     await db.refresh(stock)

@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { Bot, ExternalLink, Loader2, TrendingDown, TrendingUp, Zap } from 'lucide-react';
 import { fetcher } from '@/lib/api';
 import { formatIndexPrice, formatStockPrice } from '@/lib/format';
+import { cn } from '@/lib/cn';
+import { useGenerateReport } from '@/hooks/useGenerateReport';
 
 interface ReportHighlight {
   type: string;
@@ -19,7 +21,7 @@ interface TopPick {
   news_url?: string | null;
   change_rate?: number;
   current_price?: number;
-  price?: number; // legacy fallback
+  price?: number;
   ai_score?: number;
   key_metrics?: KeyMetrics | null;
 }
@@ -120,14 +122,14 @@ function MetricsCell({ pick }: { pick: TopPick }) {
   const changeAmount = metrics?.change_amount;
   const changeClass =
     (changeRate ?? 0) > 0
-      ? 'text-red-600'
+      ? 'text-up'
       : (changeRate ?? 0) < 0
-        ? 'text-blue-600'
-        : 'text-neutral-500';
+        ? 'text-down'
+        : 'text-muted';
 
   return (
     <div className="space-y-1 whitespace-nowrap text-xs">
-      <div className="text-sm font-bold text-neutral-900">
+      <div className="text-sm font-semibold text-foreground">
         {formatStockPrice(price, pick.ticker)}
       </div>
       <div className={`font-semibold ${changeClass}`}>
@@ -135,22 +137,22 @@ function MetricsCell({ pick }: { pick: TopPick }) {
         {changeAmount != null ? ` (${changeAmount > 0 ? '+' : ''}${formatNumber(changeAmount)})` : ''}
       </div>
       {(metrics?.day_low != null || metrics?.day_high != null) && (
-        <div className="text-neutral-500">
+        <div className="text-muted">
           당일 {formatNumber(metrics.day_low)} ~ {formatNumber(metrics.day_high)}
         </div>
       )}
       {metrics?.vs_avg_20d_pct != null && (
-        <div className="text-neutral-400">
+        <div className="text-muted">
           20일 평균 대비 {formatPct(metrics.vs_avg_20d_pct)}
         </div>
       )}
       {metrics?.vs_60d_high_pct != null && (
-        <div className="text-neutral-400">
+        <div className="text-muted">
           60일 고점 대비 {formatPct(metrics.vs_60d_high_pct)}
         </div>
       )}
       {(metrics?.per != null || metrics?.pbr != null) && (
-        <div className="text-neutral-400">
+        <div className="text-muted">
           PER {formatNumber(metrics.per)} · PBR {formatNumber(metrics.pbr)}
         </div>
       )}
@@ -170,8 +172,10 @@ function PicksTable({
   onToggleExpand: () => void;
 }) {
   const isLong = variant === 'long';
-  const headerBg = isLong ? 'bg-neutral-50' : 'bg-neutral-100';
-  const headerText = isLong ? 'text-neutral-900' : 'text-neutral-600';
+  const headerBg = isLong
+    ? 'bg-gradient-to-r from-[#f5f0ff] to-[#fefcfb]'
+    : 'bg-gradient-to-r from-[#f0f7ff] to-[#fefcfb]';
+  const headerText = isLong ? 'text-[#5b21b6]' : 'text-[#1d4ed8]';
   const capped = picks.slice(0, MAX_VISIBLE);
   const visible = expanded ? capped : capped.slice(0, PREVIEW_COUNT);
   const canExpand = capped.length > PREVIEW_COUNT;
@@ -179,17 +183,17 @@ function PicksTable({
   return (
     <div className="card-modern overflow-hidden">
       <div
-        className={`flex flex-wrap items-center justify-between gap-2 border-b border-neutral-200 px-4 py-3 ${headerBg}`}
+        className={cn('flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3', headerBg)}
       >
         <div className="flex items-center gap-2">
           {isLong ? (
-            <TrendingUp className={`h-5 w-5 ${headerText}`} />
+            <TrendingUp className={cn('h-5 w-5', headerText)} strokeWidth={1.5} />
           ) : (
-            <TrendingDown className={`h-5 w-5 ${headerText}`} />
+            <TrendingDown className={cn('h-5 w-5', headerText)} strokeWidth={1.5} />
           )}
-          <h3 className={`font-bold ${headerText}`}>
+          <h3 className={cn('font-semibold', headerText)}>
             {isLong ? '매수 (롱)' : '매도 (숏)'}
-            <span className="ml-2 text-sm font-normal text-neutral-500">
+            <span className="ml-2 text-sm font-normal text-muted">
               {expanded ? `전체 ${visible.length}건` : `Top ${Math.min(PREVIEW_COUNT, capped.length)}`}
             </span>
           </h3>
@@ -198,7 +202,7 @@ function PicksTable({
           <button
             type="button"
             onClick={onToggleExpand}
-            className="text-xs font-semibold text-neutral-600 underline-offset-2 hover:text-neutral-900 hover:underline"
+            className="text-xs font-semibold text-muted underline-offset-2 hover:text-foreground hover:underline"
           >
             {expanded ? '접기' : `더보기 (최대 ${Math.min(MAX_VISIBLE, capped.length)}건)`}
           </button>
@@ -207,7 +211,7 @@ function PicksTable({
       <div className="overflow-x-auto">
         <table className="w-full min-w-[480px] text-left text-sm">
           <thead>
-            <tr className="border-b border-neutral-200 bg-neutral-50 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            <tr className="border-b border-border bg-[#faf8ff] text-xs font-semibold text-muted">
               <th className="px-4 py-3">종목</th>
               <th className="px-4 py-3">핫 이슈</th>
               <th className="px-4 py-3 whitespace-nowrap">수치</th>
@@ -216,9 +220,9 @@ function PicksTable({
           <tbody>
             {visible.length === 0 && (
               <tr>
-                <td colSpan={3} className="px-4 py-8 text-center text-sm text-neutral-400">
+                <td colSpan={3} className="px-4 py-8 text-center text-sm text-muted">
                   표시할 종목이 없습니다.{' '}
-                  <Link href="/data" className="font-bold text-indigo-600 underline underline-offset-2">
+                  <Link href="/data" className="font-semibold text-primary underline underline-offset-2">
                     데이터 로딩 페이지
                   </Link>
                   에서 당일 데이터를 적재하면 화면이 갱신됩니다.
@@ -226,25 +230,25 @@ function PicksTable({
               </tr>
             )}
             {visible.map((pick) => (
-              <tr key={pick.ticker} className="border-b border-neutral-100 last:border-0 hover:bg-neutral-50 transition-colors">
+              <tr key={pick.ticker} className="border-b border-border/50 last:border-0 hover:bg-sidebar-hover transition-colors">
                 <td className="px-4 py-3 align-top">
                   <Link href={`/stocks/${pick.ticker}`} className="group block">
-                    <div className="font-bold text-neutral-900 group-hover:text-indigo-600 transition-colors">{pick.name}</div>
-                    <div className="text-xs text-neutral-400 group-hover:text-indigo-400 transition-colors">{pick.ticker}</div>
+                    <div className="font-semibold text-foreground group-hover:text-primary transition-colors">{pick.name}</div>
+                    <div className="text-xs text-muted group-hover:text-primary/70 transition-colors">{pick.ticker}</div>
                   </Link>
                 </td>
-                <td className="max-w-xs px-4 py-3 align-top leading-relaxed text-neutral-600">
+                <td className="max-w-xs px-4 py-3 align-top leading-relaxed text-muted">
                   {isValidNewsUrl(pick.news_url) ? (
                     <a
                       href={pick.news_url}
                       target="_blank"
                       rel="noreferrer"
-                      className="group inline-flex items-start gap-1.5 text-neutral-600 underline-offset-2 transition-colors hover:text-neutral-900 hover:underline"
+                      className="group inline-flex items-start gap-1.5 text-muted underline-offset-2 transition-colors hover:text-foreground hover:underline"
                     >
                       <span>{pick.hot_reason}</span>
                       <ExternalLink
                         size={14}
-                        className="mt-0.5 shrink-0 text-neutral-400 transition-colors group-hover:text-neutral-700"
+                        className="mt-0.5 shrink-0 text-muted transition-colors group-hover:text-foreground"
                         aria-hidden
                       />
                     </a>
@@ -266,9 +270,14 @@ function PicksTable({
 
 export default function DailyReportSection() {
   const { data, error, isLoading } = useSWR<DailyReport>('/report/daily', fetcher);
+  const { generate, loading: generating, error: generateError } = useGenerateReport();
   const [countdown, setCountdown] = useState('--:--:--');
   const [longExpanded, setLongExpanded] = useState(false);
   const [shortExpanded, setShortExpanded] = useState(false);
+
+  const handleGenerateReport = async () => {
+    await generate();
+  };
 
   useEffect(() => {
     const tick = () => setCountdown(formatCountdown(data?.next_refresh_at));
@@ -280,14 +289,14 @@ export default function DailyReportSection() {
   if (isLoading) {
     return (
       <div className="flex justify-center py-16">
-        <Loader2 className="h-8 w-8 animate-spin text-sky-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   if (error && !data) {
     return (
-      <div className="rounded-xl border border-sky-200 bg-sky-50 p-6 text-center text-sky-800 font-medium">
+      <div className="rounded-2xl bg-[#eff6ff] p-6 text-center text-[#1e40af] font-medium shadow-[var(--shadow-soft)]">
         리포트를 불러오지 못했습니다. 백엔드 서버가 실행 중인지 확인해주세요.
       </div>
     );
@@ -300,17 +309,17 @@ export default function DailyReportSection() {
   return (
     <div className="space-y-6">
       {!isLive && (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm">
+        <p className="rounded-2xl bg-[#fffbeb] px-4 py-3 text-sm text-[#92400e] shadow-[var(--shadow-soft)]">
           아직 수집된 데이터가 없습니다.{' '}
-          <Link href="/data" className="font-bold text-amber-800 underline underline-offset-2 hover:text-amber-950">
+          <Link href="/data" className="font-semibold text-[#b45309] underline underline-offset-2 hover:text-[#78350f]">
             데이터 로딩 페이지
           </Link>
           에서 시세·뉴스 수집을 실행해주세요.
         </p>
       )}
       {isLive && data.data_collected_at && (
-        <p className="text-xs text-sky-500 font-bold uppercase tracking-wider">
-          Market Snapshot: {new Date(data.data_collected_at).toLocaleString('ko-KR')}
+        <p className="text-xs text-primary font-medium">
+          시장 스냅샷: {new Date(data.data_collected_at).toLocaleString('ko-KR')}
         </p>
       )}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -329,50 +338,65 @@ export default function DailyReportSection() {
           />
         </div>
 
-        <section className="card-modern p-6 bg-white flex flex-col">
-          <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 shadow-[0_2px_8px_rgba(79,70,229,0.1)]">
-                <Bot className="h-6 w-6 text-indigo-600" />
+        <section className="ai-report-panel flex flex-col overflow-hidden rounded-[28px]">
+          <div className="ai-report-header px-6 py-5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#8b5cf6] to-[#7c3aed] shadow-[0_4px_14px_rgba(109,40,217,0.45)]">
+                  <Bot className="h-6 w-6 text-white" strokeWidth={1.5} />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground">AI Report</h3>
+                  <p className="text-[11px] font-medium text-muted">Gemini Analysis</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-black text-slate-900 uppercase tracking-tight">AI Report</h3>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Gemini Analysis</p>
+
+              <div className="flex flex-col items-end gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleGenerateReport}
+                  disabled={generating}
+                  className="btn-primary flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] shadow-sm disabled:opacity-60"
+                >
+                  {generating ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Zap className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  )}
+                  {generating ? '생성 중...' : 'AI 리포트 생성'}
+                </button>
+                {generateError && (
+                  <p className="text-right text-[10px] font-medium text-up max-w-[200px]">
+                    {generateError}
+                  </p>
+                )}
+                {data.report_generated_at && (
+                  <p className="text-right text-[10px] font-medium text-muted">
+                    업데이트: {new Date(data.report_generated_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                )}
               </div>
-            </div>
-            
-            <div className="flex flex-col items-end gap-1.5">
-              <Link
-                href="/data"
-                className="btn-primary flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] shadow-sm"
-              >
-                <Zap className="h-3.5 w-3.5" />
-                데이터 로딩에서 리포트 작성
-              </Link>
-              {data.report_generated_at && (
-                <p className="text-right text-[9px] font-bold text-slate-400 uppercase tracking-tighter">
-                  Update: {new Date(data.report_generated_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-                </p>
-              )}
             </div>
           </div>
-          
-          <div className="space-y-5 text-left">
-            {/* 시장 요약 통합 */}
+
+          <div className="space-y-5 p-6 text-left">
             {data.market_summary && (
-              <div className="rounded-2xl bg-slate-900 p-5 text-white shadow-lg shadow-slate-900/10">
-                <h4 className="mb-3 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-300">
-                  <Zap className="h-4 w-4 text-yellow-400" /> Daily Briefing
+              <div className="ai-report-briefing rounded-2xl p-5 shadow-[var(--shadow-soft)]">
+                <h4 className="mb-3 flex items-center gap-2 text-xs font-semibold text-primary">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#fef3c7]/40">
+                    <Zap className="h-3.5 w-3.5 text-[#d97706]" strokeWidth={1.5} />
+                  </span>
+                  Daily Briefing
                 </h4>
-                <p className="text-base leading-relaxed text-slate-100 font-medium">
+                <p className="text-base leading-relaxed text-foreground font-medium">
                   {data.market_summary}
                 </p>
                 {data.highlights?.length > 0 && (
-                  <div className="mt-4 space-y-2 border-t border-slate-700 pt-4">
+                  <div className="mt-4 space-y-2 pt-4">
                     {data.highlights.map((h, i) => (
                       <div key={i} className="flex items-start gap-2 text-[13px] font-medium">
-                        <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-slate-400" />
-                        <span className="text-slate-300">{h.text}</span>
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/50" />
+                        <span className="text-muted">{h.text}</span>
                       </div>
                     ))}
                   </div>
@@ -385,20 +409,57 @@ export default function DailyReportSection() {
                 {(['long', 'short'] as const).map((position) => {
                   const reports = data.company_reports.filter((r) => r.position === position);
                   if (!reports.length) return null;
+                  const isLong = position === 'long';
                   return (
                     <div key={position} className="space-y-3">
-                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        {position === 'long' ? '매수(롱) Top5' : '매도(숏) Top5'}
-                      </h4>
+                      <div className={cn(
+                        'flex items-center gap-2 rounded-xl px-3 py-2',
+                        isLong ? 'bg-[#f5f0ff]' : 'bg-[#f0f7ff]'
+                      )}>
+                        {isLong ? (
+                          <TrendingUp className="h-4 w-4 text-primary" strokeWidth={1.5} />
+                        ) : (
+                          <TrendingDown className="h-4 w-4 text-down" strokeWidth={1.5} />
+                        )}
+                        <h4 className={cn(
+                          'text-[11px] font-semibold',
+                          isLong ? 'text-primary' : 'text-down'
+                        )}>
+                          {isLong ? '매수(롱) Top5' : '매도(숏) Top5'}
+                        </h4>
+                      </div>
                       {reports.map((report) => (
-                        <div key={`${position}-${report.ticker}`} className="rounded-2xl border border-slate-100 p-4 shadow-sm hover:border-indigo-200 hover:bg-slate-50 transition-all group">
-                          <Link href={`/stocks/${report.ticker}`} className="block mb-3 text-base font-black text-slate-900 group-hover:text-indigo-600 transition-colors">
-                            {report.name} <span className="text-xs font-bold text-slate-400 uppercase ml-1 group-hover:text-indigo-400">{report.ticker}</span>
+                        <div
+                          key={`${position}-${report.ticker}`}
+                          className={cn(
+                            'rounded-2xl p-4 shadow-[var(--shadow-soft)] transition-all group',
+                            isLong ? 'ai-report-long-card hover:shadow-[var(--shadow-card)]' : 'ai-report-short-card hover:shadow-[var(--shadow-card)]'
+                          )}
+                        >
+                          <Link
+                            href={`/stocks/${report.ticker}`}
+                            className={cn(
+                              'block mb-3 text-base font-semibold text-foreground transition-colors',
+                              isLong ? 'group-hover:text-primary' : 'group-hover:text-down'
+                            )}
+                          >
+                            {report.name}{' '}
+                            <span className={cn(
+                              'text-xs font-medium ml-1',
+                              isLong ? 'text-primary/70 group-hover:text-primary' : 'text-down/70 group-hover:text-down'
+                            )}>
+                              {report.ticker}
+                            </span>
                           </Link>
-                          <ul className="space-y-2 text-sm leading-relaxed text-slate-600 font-medium">
+                          <ul className="space-y-2 text-sm leading-relaxed text-muted font-medium">
                             {report.lines.slice(0, 3).map((line, i) => (
                               <li key={i} className="flex gap-2.5">
-                                <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-slate-300" />
+                                <span
+                                  className={cn(
+                                    'mt-2 h-1.5 w-1.5 shrink-0 rounded-full',
+                                    isLong ? 'bg-primary/60' : 'bg-down/60'
+                                  )}
+                                />
                                 {line}
                               </li>
                             ))}
@@ -410,10 +471,13 @@ export default function DailyReportSection() {
                 })}
               </>
             ) : (
-              <div className="rounded-2xl bg-slate-50/50 border border-dashed border-slate-200 p-8 text-center">
-                <p className="text-xs font-bold text-slate-400 leading-relaxed">
+              <div className="rounded-2xl bg-[#faf5ff]/80 p-8 text-center shadow-[var(--shadow-soft)]">
+                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-sidebar-active">
+                  <Bot className="h-5 w-5 text-primary" strokeWidth={1.5} />
+                </div>
+                <p className="text-xs font-medium text-muted leading-relaxed">
                   아직 작성된 AI 리포트가 없습니다.<br/>
-                  <Link href="/data" className="font-bold text-indigo-600 underline underline-offset-2">
+                  <Link href="/data" className="font-semibold text-primary underline underline-offset-2 hover:opacity-80">
                     데이터 로딩 페이지
                   </Link>
                   에서 AI 리포트를 작성해주세요.
@@ -430,9 +494,9 @@ export default function DailyReportSection() {
 export function MacroTicker({ indices }: { indices: MarketIndex[] }) {
   if (!indices.length) {
     return (
-      <section className="card-modern px-4 py-3 text-sm text-neutral-500">
+      <section className="card-modern px-4 py-3 text-sm text-muted bg-surface rounded-full">
         시장 지수 데이터 없음.{' '}
-        <Link href="/data" className="font-bold text-indigo-600 underline underline-offset-2">
+        <Link href="/data" className="font-semibold text-primary underline underline-offset-2">
           데이터 로딩 페이지
         </Link>
         에서 시세 수집 후 표시됩니다.
@@ -445,7 +509,7 @@ export function MacroTicker({ indices }: { indices: MarketIndex[] }) {
     const price = formatIndexPrice(idx.price, idx.name);
     const change = idx.change ?? 0;
     const arrow = change >= 0 ? '▲' : '▼';
-    const color = change >= 0 ? 'text-red-600 font-bold' : 'text-blue-600 font-bold';
+    const color = change >= 0 ? 'text-up font-semibold' : 'text-down font-semibold';
     return (
       <span key={idx.name}>
         {label}: {price}{' '}
@@ -457,8 +521,8 @@ export function MacroTicker({ indices }: { indices: MarketIndex[] }) {
   });
 
   return (
-    <section className="card-modern overflow-hidden py-3">
-      <div className="flex animate-marquee gap-12 whitespace-nowrap px-4 text-sm font-medium text-neutral-500">
+    <section className="card-modern overflow-hidden py-3 bg-surface rounded-full">
+      <div className="flex animate-marquee gap-12 whitespace-nowrap px-4 text-sm font-medium text-muted">
         {[...items, ...items].map((item, i) => (
           <span key={i}>{item}</span>
         ))}

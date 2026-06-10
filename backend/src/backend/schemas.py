@@ -56,6 +56,7 @@ class StockBase(BaseModel):
     ai_score: Optional[int] = None
     ai_recommendation: Optional[str] = None
     ai_analysis: Optional[Dict] = None
+    quant_analysis: Optional[Dict] = None
     business_insight: Optional[Dict] = None
     financials_collected_at: Optional[datetime] = None
     news_collected_at: Optional[datetime] = None

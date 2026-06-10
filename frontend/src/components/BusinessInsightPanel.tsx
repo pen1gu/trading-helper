@@ -8,7 +8,8 @@ import {
   Tooltip,
 } from 'recharts';
 import { Loader2, Shield, FlaskConical, Landmark, Info } from 'lucide-react';
-import { clsx } from 'clsx';
+import { cn } from '@/lib/cn';
+import { chartColors } from '@/lib/chart-colors';
 
 interface InsightMetric {
   score?: number;
@@ -44,11 +45,11 @@ interface Props {
 }
 
 const ALLOCATION_COLORS: Record<string, string> = {
-  capex: '#3b82f6',
-  rd: '#8b5cf6',
-  dividends: '#22c55e',
-  buybacks: '#f59e0b',
-  debt: '#ef4444',
+  capex: chartColors.series[3],
+  rd: chartColors.series[0],
+  dividends: chartColors.series[1],
+  buybacks: chartColors.series[2],
+  debt: chartColors.up,
 };
 
 const ALLOCATION_LABELS: Record<string, string> = {
@@ -60,13 +61,13 @@ const ALLOCATION_LABELS: Record<string, string> = {
 };
 
 function ScoreBadge({ score }: { score?: number }) {
-  if (score == null) return <span className="text-xs text-neutral-400">-</span>;
+  if (score == null) return <span className="text-xs text-muted">-</span>;
   const color =
-    score >= 70 ? 'bg-emerald-50 text-emerald-700' :
-    score >= 40 ? 'bg-amber-50 text-amber-700' :
-    'bg-red-50 text-red-600';
+    score >= 70 ? 'bg-[#d1fae5] text-[#047857]' :
+    score >= 40 ? 'bg-[#fffbeb] text-[#b45309]' :
+    'bg-[#fde8e8] text-up';
   return (
-    <span className={clsx('rounded-lg px-2 py-1 text-xs font-black', color)}>
+    <span className={cn('rounded-lg px-2 py-1 text-xs font-semibold', color)}>
       {score}
     </span>
   );
@@ -84,17 +85,17 @@ function MetricCard({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+    <div className="rounded-2xl bg-card p-4 shadow-[var(--shadow-soft)]">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="flex items-center gap-2 text-xs font-bold text-neutral-900">
-          <Icon className="h-3.5 w-3.5 text-neutral-400" />
+        <h3 className="flex items-center gap-2 text-xs font-semibold text-foreground">
+          <Icon className="h-3.5 w-3.5 text-muted" strokeWidth={1.5} />
           {title}
         </h3>
         <ScoreBadge score={metric?.score} />
       </div>
       {children}
       {metric?.interpretation && (
-        <p className="mt-3 text-[11px] leading-relaxed text-neutral-500">
+        <p className="mt-3 text-[11px] leading-relaxed text-muted">
           {metric.interpretation}
         </p>
       )}
@@ -105,21 +106,21 @@ function MetricCard({
 export default function BusinessInsightPanel({ data, isLoading }: Props) {
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center rounded-xl border border-dashed border-neutral-200 bg-white p-10">
-        <Loader2 className="h-6 w-6 animate-spin text-neutral-300" />
-        <span className="ml-2 text-xs text-neutral-400">재무 공시 데이터 분석 중...</span>
+      <div className="flex items-center justify-center rounded-2xl bg-surface p-10 shadow-[var(--shadow-soft)]">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        <span className="ml-2 text-xs text-muted">재무 공시 데이터 분석 중...</span>
       </div>
     );
   }
 
   if (!data || data.status === 'unavailable' || data.status === 'not_found') {
     return (
-      <div className="rounded-xl border border-dashed border-neutral-200 bg-white p-6 text-center">
-        <Info className="mx-auto mb-2 h-5 w-5 text-neutral-300" />
-        <p className="text-xs font-medium text-neutral-500">
+      <div className="rounded-2xl bg-surface p-6 text-center shadow-[var(--shadow-soft)]">
+        <Info className="mx-auto mb-2 h-5 w-5 text-muted" strokeWidth={1.5} />
+        <p className="text-xs font-medium text-muted">
           {data?.message || '재무 공시 데이터를 수집할 수 없습니다.'}
         </p>
-        <p className="mt-1 text-[10px] text-neutral-400">
+        <p className="mt-1 text-[10px] text-muted">
           SEC EDGAR(미국) 또는 DART(한국) 공시 데이터가 필요합니다.
         </p>
       </div>
@@ -145,23 +146,23 @@ export default function BusinessInsightPanel({ data, isLoading }: Props) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-sm font-bold text-neutral-900">
-          <Landmark className="h-4 w-4 text-neutral-400" />
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <Landmark className="h-4 w-4 text-muted" strokeWidth={1.5} />
           핵심 사업·경영 분석
         </h2>
         <div className="flex items-center gap-2">
-          <span className="rounded bg-neutral-100 px-2 py-0.5 text-[10px] font-bold text-neutral-500">
+          <span className="rounded-lg bg-surface px-2 py-0.5 text-[10px] font-semibold text-muted">
             프록시 지표
           </span>
           {data.source && (
-            <span className="text-[10px] text-neutral-400 uppercase">{data.source}</span>
+            <span className="text-[10px] text-muted">{data.source}</span>
           )}
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <MetricCard icon={Shield} title="전환 비용 프록시" metric={data.moat_proxy}>
-          <div className="space-y-1 text-[11px] text-neutral-600">
+          <div className="space-y-1 text-[11px] text-muted">
             {data.moat_proxy?.deferred_revenue_ratio != null && (
               <p>
                 계약부채/매출:{' '}
@@ -177,7 +178,7 @@ export default function BusinessInsightPanel({ data, isLoading }: Props) {
         </MetricCard>
 
         <MetricCard icon={FlaskConical} title="R&D 효율" metric={data.rd_efficiency}>
-          <div className="space-y-1 text-[11px] text-neutral-600">
+          <div className="space-y-1 text-[11px] text-muted">
             {data.rd_efficiency?.rd_intensity_pct != null && (
               <p>R&D/매출: {data.rd_efficiency.rd_intensity_pct.toFixed(1)}%</p>
             )}
@@ -203,21 +204,21 @@ export default function BusinessInsightPanel({ data, isLoading }: Props) {
                       {chartData.map((entry) => (
                         <Cell
                           key={entry.key}
-                          fill={ALLOCATION_COLORS[entry.key] || '#94a3b8'}
+                          fill={ALLOCATION_COLORS[entry.key] || chartColors.axis}
                         />
                       ))}
                     </Pie>
                     <Tooltip
-                      formatter={(value: number) => [`${value.toFixed(1)}%`, '']}
-                      contentStyle={{ fontSize: 11 }}
+                      formatter={(value) => [`${Number(value).toFixed(1)}%`, '']}
+                      contentStyle={{ fontSize: 11, borderRadius: 12, border: '1px solid #f0e8f5' }}
                     />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
             ) : null}
-            <div className="space-y-0.5 text-[11px] text-neutral-600">
+            <div className="space-y-0.5 text-[11px] text-muted">
               {data.capital_allocation?.profile && (
-                <p className="font-bold text-neutral-800">
+                <p className="font-semibold text-foreground">
                   {profileLabels[data.capital_allocation.profile] || data.capital_allocation.profile}
                 </p>
               )}
@@ -236,7 +237,7 @@ export default function BusinessInsightPanel({ data, isLoading }: Props) {
       </div>
 
       {data.data_years && data.data_years.length > 0 && (
-        <p className="text-[10px] text-neutral-400">
+        <p className="text-[10px] text-muted">
           분석 기간: {Math.min(...data.data_years)}~{Math.max(...data.data_years)}년
         </p>
       )}

@@ -1,28 +1,30 @@
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css');
 @import "tailwindcss";
 
-html {
-  font-size: 115%; /* 기본 글꼴 크기를 115%로 조정 */
-}
-
 :root {
-  --background: #f8fafc; /* slate-50 */
-  --foreground: #0f172a; /* slate-900 */
-  --sidebar: #ffffff;
-  --sidebar-hover: #f1f5f9; /* slate-100 */
-  --sidebar-active: #eef2ff; /* indigo-50 */
+  --background: #f3e8df;
+  --foreground: #2a2338;
+  --sidebar: #fff9f5;
+  --sidebar-hover: #e8deff;
+  --sidebar-active: #d4c4fc;
   --card: #ffffff;
-  --primary: #4f46e5; /* indigo-600 */
-  --primary-hover: #4338ca; /* indigo-700 */
-  --muted: #64748b; /* slate-500 */
-  --muted-light: #94a3b8; /* slate-400 */
-  --border: #e2e8f0; /* slate-200 */
-  --border-dark: #cbd5e1; /* slate-300 */
-  --surface: #f1f5f9;
-  --up: #ef4444; /* red-500 */
-  --down: #3b82f6; /* blue-500 */
-  --shadow-card: 0 4px 24px -4px rgba(15, 23, 42, 0.04), 0 1px 4px -2px rgba(15, 23, 42, 0.04);
-  --shadow-soft: 0 2px 12px -2px rgba(15, 23, 42, 0.03);
+  --primary: #7c3aed;
+  --primary-hover: #6d28d9;
+  --muted: #6b5f7a;
+  --muted-light: #8a7da3;
+  --border: #e0d4ec;
+  --border-dark: #cfc2e0;
+  --surface: #ede4ff;
+  --up: #ef4444;
+  --down: #3b82f6;
+  --accent-mint: #6ee7b7;
+  --accent-peach: #fca5a5;
+  --accent-lavender: #c4b5fd;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
+  --radius-2xl: 40px;
+  --shadow-card: 0 4px 24px -4px rgba(109, 40, 217, 0.14), 0 2px 8px -2px rgba(42, 35, 56, 0.08);
+  --shadow-soft: 0 2px 14px -2px rgba(109, 40, 217, 0.1), 0 1px 4px rgba(42, 35, 56, 0.05);
 }
 
 @theme inline {
@@ -31,6 +33,13 @@ html {
   --color-primary: var(--primary);
   --color-muted: var(--muted);
   --color-border: var(--border);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-card: var(--card);
+  --color-surface: var(--surface);
+  --color-up: var(--up);
+  --color-down: var(--down);
   --font-sans: "Pretendard Variable", Pretendard, system-ui, -apple-system, sans-serif;
 
   @keyframes marquee {
@@ -58,48 +67,46 @@ body {
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background-image: radial-gradient(circle, #cbd5e1 1px, transparent 1px);
-  background-size: 32px 32px;
-  opacity: 0.2;
+  background:
+    radial-gradient(ellipse 80% 60% at 10% 20%, rgba(196, 181, 253, 0.45) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 90% 80%, rgba(252, 165, 165, 0.3) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 40% at 70% 10%, rgba(110, 231, 183, 0.28) 0%, transparent 50%);
 }
 
-/* 핀터레스트 스타일: 둥근 모서리(Bento Box)와 부드러운 그림자 */
 .card-modern {
   background: var(--card);
-  border-radius: 20px;
+  border-radius: 28px;
   box-shadow: var(--shadow-card);
-  border: 1px solid var(--border);
+  border: none;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .card-modern-sm {
   background: var(--card);
-  border-radius: 16px;
+  border-radius: 20px;
   box-shadow: var(--shadow-soft);
-  border: 1px solid var(--border);
+  border: none;
 }
 
 .btn-primary {
-  background: var(--primary);
+  background: linear-gradient(135deg, var(--primary) 0%, #a78bfa 100%);
   color: white;
-  border-radius: 14px;
+  border-radius: 16px;
   font-weight: 600;
-  box-shadow: 0 4px 14px -2px rgba(79, 70, 229, 0.4);
+  box-shadow: 0 4px 14px -2px rgba(109, 40, 217, 0.45);
   transition: all 0.2s ease;
 }
 
 .btn-primary:hover {
-  background: var(--primary-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px -2px rgba(79, 70, 229, 0.5);
+  background: linear-gradient(135deg, var(--primary-hover) 0%, var(--primary) 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px -2px rgba(109, 40, 217, 0.55);
 }
 
-/* Glassmorphism 효과 */
 .glass-panel {
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(243, 232, 223, 0.88);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
 }
 
 .scrollbar-hide::-webkit-scrollbar {
@@ -108,4 +115,35 @@ body {
 .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
+}
+
+/* AI Report 패널 — 텍스트 영역은 연한 틴트 */
+.ai-report-panel {
+  background: linear-gradient(165deg, #faf7ff 0%, #fdf9f6 50%, #fffafa 100%);
+  border: none;
+  box-shadow: var(--shadow-card);
+}
+
+.ai-report-header {
+  background: linear-gradient(
+    90deg,
+    rgba(237, 228, 255, 0.35) 0%,
+    rgba(255, 255, 255, 0.75) 55%,
+    rgba(254, 226, 226, 0.15) 100%
+  );
+}
+
+.ai-report-briefing {
+  background: linear-gradient(135deg, rgba(237, 228, 255, 0.28) 0%, rgba(255, 255, 255, 0.92) 55%, #fefcf9 100%);
+  box-shadow: var(--shadow-soft);
+}
+
+.ai-report-long-card {
+  background: linear-gradient(135deg, rgba(237, 228, 255, 0.22) 0%, #ffffff 65%);
+  box-shadow: var(--shadow-soft);
+}
+
+.ai-report-short-card {
+  background: linear-gradient(135deg, rgba(224, 242, 254, 0.28) 0%, #ffffff 65%);
+  box-shadow: var(--shadow-soft);
 }
