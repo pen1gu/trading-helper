@@ -82,6 +82,7 @@ class Stock(Base):
     # Business insight (rule-based, no AI)
     business_insight = Column(JSON)
     financials_collected_at = Column(DateTime(timezone=True))
+    news_collected_at = Column(DateTime(timezone=True))
 
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
