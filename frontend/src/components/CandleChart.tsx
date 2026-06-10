@@ -10,6 +10,7 @@ import {
   AreaChart,
   Area,
 } from 'recharts';
+import { chartColors } from '@/lib/chart-colors';
 
 interface BarData {
   trade_date: string;
@@ -32,23 +33,23 @@ const CustomTooltip = ({ active, payload }: any) => {
     const changePct = (change / data.open_price) * 100;
 
     return (
-      <div className="rounded-xl border border-neutral-200 bg-white/90 p-4 shadow-xl backdrop-blur-md text-xs">
-        <p className="mb-2 font-black text-neutral-400 uppercase">{data.trade_date}</p>
+      <div className="rounded-xl bg-card/95 p-4 shadow-xl backdrop-blur-md text-xs">
+        <p className="mb-2 font-semibold text-muted">{data.trade_date}</p>
         <div className="space-y-2">
           <div className="flex justify-between gap-8">
-            <span className="text-neutral-500 font-bold">종가</span>
-            <span className={`font-black ${isUp ? 'text-red-500' : 'text-blue-500'}`}>
+            <span className="text-muted font-medium">종가</span>
+            <span className={`font-semibold ${isUp ? 'text-up' : 'text-down'}`}>
               {data.close_price.toLocaleString()}원 ({changePct >= 0 ? '+' : ''}{changePct.toFixed(2)}%)
             </span>
           </div>
-          <div className="h-[1px] bg-neutral-100" />
+          <div className="h-[1px] bg-border" />
           <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
-            <span className="text-neutral-400">시가</span>
-            <span className="text-right font-bold text-neutral-900">{data.open_price.toLocaleString()}</span>
-            <span className="text-neutral-400">고가</span>
-            <span className="text-right font-bold text-neutral-900">{data.high_price.toLocaleString()}</span>
-            <span className="text-neutral-400">저가</span>
-            <span className="text-right font-bold text-neutral-900">{data.low_price.toLocaleString()}</span>
+            <span className="text-muted">시가</span>
+            <span className="text-right font-semibold text-foreground">{data.open_price.toLocaleString()}</span>
+            <span className="text-muted">고가</span>
+            <span className="text-right font-semibold text-foreground">{data.high_price.toLocaleString()}</span>
+            <span className="text-muted">저가</span>
+            <span className="text-right font-semibold text-foreground">{data.low_price.toLocaleString()}</span>
           </div>
         </div>
       </div>
@@ -58,7 +59,6 @@ const CustomTooltip = ({ active, payload }: any) => {
 };
 
 export default function CandleChart({ data }: CandleChartProps) {
-  // 전체적인 추세(상승/하락) 판단 (마지막 날 종가 vs 첫 날 시가)
   const isTrendUp = useMemo(() => {
     if (!data || data.length < 2) return true;
     const firstPrice = data[0].close_price;
@@ -66,9 +66,8 @@ export default function CandleChart({ data }: CandleChartProps) {
     return lastPrice >= firstPrice;
   }, [data]);
 
-  const trendColor = isTrendUp ? '#ef4444' : '#3b82f6'; // red-500, blue-500
+  const trendColor = isTrendUp ? chartColors.up : chartColors.down;
 
-  // Y축 자동 스케일링
   const { minPrice, maxPrice } = useMemo(() => {
     if (!data || data.length === 0) return { minPrice: 0, maxPrice: 100 };
     const values = data.map(d => d.close_price);
@@ -84,54 +83,53 @@ export default function CandleChart({ data }: CandleChartProps) {
   return (
     <div className="h-[400px] w-full select-none">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart 
-          data={data} 
+        <AreaChart
+          data={data}
           margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
         >
           <defs>
             <linearGradient id="colorTrend" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={trendColor} stopOpacity={0.2}/>
+              <stop offset="5%" stopColor={trendColor} stopOpacity={0.25}/>
               <stop offset="95%" stopColor={trendColor} stopOpacity={0}/>
             </linearGradient>
           </defs>
 
-          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f5f5f5" />
-          
-          <XAxis 
-            dataKey="trade_date" 
-            tick={{ fontSize: 10, fill: '#D4D4D4', fontWeight: 600 }} 
-            axisLine={false} 
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartColors.grid} />
+
+          <XAxis
+            dataKey="trade_date"
+            tick={{ fontSize: 10, fill: chartColors.axis, fontWeight: 500 }}
+            axisLine={false}
             tickLine={false}
             minTickGap={50}
           />
-          
-          <YAxis 
-            domain={[minPrice, maxPrice]} 
-            tick={{ fontSize: 10, fill: '#D4D4D4', fontWeight: 600 }} 
-            axisLine={false} 
+
+          <YAxis
+            domain={[minPrice, maxPrice]}
+            tick={{ fontSize: 10, fill: chartColors.axis, fontWeight: 500 }}
+            axisLine={false}
             tickLine={false}
             orientation="right"
             tickFormatter={(value) => value.toLocaleString()}
             width={60}
           />
-          
-          <Tooltip 
-            content={<CustomTooltip />} 
-            cursor={{ stroke: '#E5E5E5', strokeWidth: 1, strokeDasharray: '5 5' }}
+
+          <Tooltip
+            content={<CustomTooltip />}
+            cursor={{ stroke: chartColors.grid, strokeWidth: 1, strokeDasharray: '5 5' }}
           />
 
-          {/* 메인 가격 선 및 그라데이션 영역 */}
-          <Area 
-            type="monotone" 
-            dataKey="close_price" 
-            stroke={trendColor} 
-            strokeWidth={4} 
-            fillOpacity={1} 
-            fill="url(#colorTrend)" 
+          <Area
+            type="monotone"
+            dataKey="close_price"
+            stroke={trendColor}
+            strokeWidth={3}
+            fillOpacity={1}
+            fill="url(#colorTrend)"
             isAnimationActive={false}
-            activeDot={{ r: 6, strokeWidth: 0, fill: trendColor }}
+            activeDot={{ r: 5, strokeWidth: 0, fill: trendColor }}
           />
-          
+
         </AreaChart>
       </ResponsiveContainer>
     </div>

@@ -15,13 +15,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" className="h-full antialiased">
-      <body className="min-h-full bg-neutral-100 text-neutral-900 font-sans">
+      <body className="min-h-full bg-background text-foreground font-sans">
         <div className="app-bg-pattern" aria-hidden />
         <Sidebar />
-        <div className="relative z-10 ml-[240px] min-h-screen">
+        <div className="relative z-10 ml-[260px] min-h-screen">
           <div className="px-8 py-6">
             <Header />
-            <main>{children}</main>
+            <main className="rounded-[40px] bg-card shadow-[var(--shadow-card)] p-6 min-h-[calc(100vh-120px)]">
+              {children}
+            </main>
           </div>
         </div>
       </body>

@@ -82,8 +82,8 @@ export function calculateQuantScore(stock: Stock): number {
  * 점수대에 따른 등급 및 라벨 반환
  */
 export function getQuantGrade(score: number): { label: string; color: string } {
-  if (score >= 80) return { label: '강력 매수 (Classic)', color: 'text-red-600' };
-  if (score >= 60) return { label: '매수 우위 (Growth)', color: 'text-orange-500' };
-  if (score >= 40) return { label: '보유 (Hold)', color: 'text-neutral-500' };
-  return { label: '관망 (Underweight)', color: 'text-blue-500' };
+  if (score >= 80) return { label: '강력 매수 (Classic)', color: 'text-up' };
+  if (score >= 60) return { label: '매수 우위 (Growth)', color: 'text-[#f59e0b]' };
+  if (score >= 40) return { label: '보유 (Hold)', color: 'text-muted' };
+  return { label: '관망 (Underweight)', color: 'text-down' };
 }

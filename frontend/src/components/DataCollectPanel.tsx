@@ -16,7 +16,7 @@ import {
 import { API_BASE_URL } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import { useGenerateReport } from '@/hooks/useGenerateReport';
-import { clsx } from 'clsx';
+import { cn } from '@/lib/cn';
 
 export interface CollectStatus {
   market: {
@@ -76,14 +76,14 @@ function getStreamUrl(kind: ActionKind): string | null {
 }
 
 function variantStyles(variant: ActionConfig['variant'], status: 'idle' | 'running' | 'done' | 'error') {
-  if (status === 'error') return 'bg-red-500 text-white shadow-lg shadow-red-100';
-  if (status === 'done') return 'bg-emerald-600 text-white shadow-lg shadow-emerald-100';
+  if (status === 'error') return 'bg-up text-white shadow-lg shadow-[#fecaca]';
+  if (status === 'done') return 'bg-[#10b981] text-white shadow-lg shadow-[#a7f3d0]';
   const map = {
-    sky: 'bg-sky-600 text-white hover:bg-sky-700 shadow-lg shadow-sky-100 disabled:bg-sky-100 disabled:text-sky-400',
-    amber: 'bg-amber-500 text-white hover:bg-amber-600 shadow-lg shadow-amber-100 disabled:bg-amber-100 disabled:text-amber-300',
-    emerald: 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-100 disabled:bg-emerald-100 disabled:text-emerald-300',
-    violet: 'bg-violet-600 text-white hover:bg-violet-700 shadow-lg shadow-violet-100 disabled:bg-violet-100 disabled:text-violet-300',
-    indigo: 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-100 disabled:bg-indigo-100 disabled:text-indigo-300',
+    sky: 'bg-[#60a5fa] text-white hover:bg-[#3b82f6] shadow-lg shadow-[#bfdbfe] disabled:bg-[#e0f2fe] disabled:text-[#93c5fd]',
+    amber: 'bg-[#fbbf24] text-white hover:bg-[#f59e0b] shadow-lg shadow-[#fde68a] disabled:bg-[#fffbeb] disabled:text-[#fcd34d]',
+    emerald: 'bg-[#34d399] text-white hover:bg-[#10b981] shadow-lg shadow-[#a7f3d0] disabled:bg-[#d1fae5] disabled:text-[#6ee7b7]',
+    violet: 'bg-[#a78bfa] text-white hover:bg-[#8b5cf6] shadow-lg shadow-[#ddd6fe] disabled:bg-[#ede9fe] disabled:text-[#c4b5fd]',
+    indigo: 'bg-primary text-white hover:bg-primary-hover shadow-lg shadow-[#ddd6fe] disabled:bg-sidebar-active disabled:text-[#c4b5fd]',
   };
   return map[variant];
 }
@@ -171,42 +171,42 @@ function CollectActionButton({
   };
 
   return (
-    <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="flex flex-col gap-2 rounded-2xl bg-card p-5 shadow-[var(--shadow-soft)]">
       <div className="flex items-start gap-3">
-        <div className={clsx(
+        <div className={cn(
           'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
-          config.variant === 'sky' && 'bg-sky-50 text-sky-600',
-          config.variant === 'amber' && 'bg-amber-50 text-amber-600',
-          config.variant === 'emerald' && 'bg-emerald-50 text-emerald-600',
-          config.variant === 'violet' && 'bg-violet-50 text-violet-600',
-          config.variant === 'indigo' && 'bg-indigo-50 text-indigo-600',
+          config.variant === 'sky' && 'bg-[#e0f2fe] text-[#2563eb]',
+          config.variant === 'amber' && 'bg-[#fffbeb] text-[#d97706]',
+          config.variant === 'emerald' && 'bg-[#d1fae5] text-[#059669]',
+          config.variant === 'violet' && 'bg-[#ede9fe] text-[#7c3aed]',
+          config.variant === 'indigo' && 'bg-sidebar-active text-primary',
         )}>
-          <Icon className="h-5 w-5" />
+          <Icon className="h-5 w-5" strokeWidth={1.5} />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-black text-slate-900">{config.label}</h3>
-          <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{config.description}</p>
+          <h3 className="text-sm font-semibold text-foreground">{config.label}</h3>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-muted">{config.description}</p>
           {config.warning && (
-            <p className="mt-1.5 text-[10px] font-bold text-amber-600">{config.warning}</p>
+            <p className="mt-1.5 text-[10px] font-semibold text-[#d97706]">{config.warning}</p>
           )}
         </div>
       </div>
 
       {config.lastUpdatedAt ? (
-        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400">
-          <Clock size={10} />
+        <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted">
+          <Clock size={10} strokeWidth={1.5} />
           <span>최근: {formatDate(config.lastUpdatedAt, 'YYYY-MM-DD HH:mm:ss')}</span>
         </div>
       ) : (
-        <div className="text-[10px] font-bold text-slate-300">수집 이력 없음</div>
+        <div className="text-[10px] font-medium text-border-dark">수집 이력 없음</div>
       )}
 
       <button
         type="button"
         onClick={handleClick}
         disabled={isRunning || disabled}
-        className={clsx(
-          'relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl px-4 py-3 text-xs font-black transition-all',
+        className={cn(
+          'relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl px-4 py-3 text-xs font-semibold transition-all',
           variantStyles(config.variant, status),
         )}
       >
@@ -218,13 +218,13 @@ function CollectActionButton({
         )}
         <span className="relative flex items-center gap-2">
           {status === 'done' ? (
-            <CheckCircle2 className="h-4 w-4" />
+            <CheckCircle2 className="h-4 w-4" strokeWidth={1.5} />
           ) : status === 'error' ? (
-            <AlertCircle className="h-4 w-4" />
+            <AlertCircle className="h-4 w-4" strokeWidth={1.5} />
           ) : isRunning ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
-            <Icon className="h-4 w-4" />
+            <Icon className="h-4 w-4" strokeWidth={1.5} />
           )}
           {status === 'done'
             ? '완료'
@@ -240,9 +240,9 @@ function CollectActionButton({
 
       {message && (
         <p
-          className={clsx(
-            'text-[10px] font-bold text-center truncate',
-            status === 'done' ? 'text-emerald-600' : status === 'error' ? 'text-red-500' : 'text-slate-500',
+          className={cn(
+            'text-[10px] font-semibold text-center truncate',
+            status === 'done' ? 'text-[#059669]' : status === 'error' ? 'text-up' : 'text-muted',
           )}
         >
           {message}
@@ -262,10 +262,10 @@ function StatusCard({
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl bg-card p-5 shadow-[var(--shadow-soft)]">
       <div className="mb-3 flex items-center gap-2">
-        <Icon className="h-4 w-4 text-indigo-500" />
-        <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">{title}</h3>
+        <Icon className="h-4 w-4 text-primary" strokeWidth={1.5} />
+        <h3 className="text-xs font-semibold text-muted">{title}</h3>
       </div>
       <dl className="space-y-2 text-sm">{children}</dl>
     </div>
@@ -275,8 +275,8 @@ function StatusCard({
 function StatusRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4">
-      <dt className="text-[11px] font-medium text-slate-500">{label}</dt>
-      <dd className="text-[11px] font-black text-slate-900 text-right">{value}</dd>
+      <dt className="text-[11px] font-medium text-muted">{label}</dt>
+      <dd className="text-[11px] font-semibold text-foreground text-right">{value}</dd>
     </div>
   );
 }
@@ -290,7 +290,7 @@ export function CollectStatusPanel({ status }: { status?: CollectStatus }) {
   if (!status) {
     return (
       <div className="flex justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -382,7 +382,7 @@ export default function DataCollectPanel({ status }: { status?: CollectStatus })
     <div className="space-y-8">
       <CollectStatusPanel status={status} />
       <div>
-        <h2 className="mb-4 text-xs font-black uppercase tracking-widest text-slate-400">수집 액션</h2>
+        <h2 className="mb-4 text-xs font-semibold text-muted">수집 액션</h2>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {actions.map((action) => (
             <CollectActionButton key={action.kind} config={action} onComplete={refreshAll} />
