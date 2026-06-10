@@ -1,23 +1,28 @@
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css');
 @import "tailwindcss";
 
+html {
+  font-size: 115%; /* 기본 글꼴 크기를 115%로 조정 */
+}
+
 :root {
-  --background: #f5f5f5;
-  --foreground: #171717;
-  --sidebar: #0a0a0a;
-  --sidebar-hover: #1a1a1a;
-  --sidebar-active: #262626;
+  --background: #f8fafc; /* slate-50 */
+  --foreground: #0f172a; /* slate-900 */
+  --sidebar: #ffffff;
+  --sidebar-hover: #f1f5f9; /* slate-100 */
+  --sidebar-active: #eef2ff; /* indigo-50 */
   --card: #ffffff;
-  --primary: #171717;
-  --primary-hover: #404040;
-  --muted: #737373;
-  --muted-light: #a3a3a3;
-  --border: #e5e5e5;
-  --border-dark: #262626;
-  --surface: #fafafa;
-  --up: #171717;
-  --down: #737373;
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.04);
-  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --primary: #4f46e5; /* indigo-600 */
+  --primary-hover: #4338ca; /* indigo-700 */
+  --muted: #64748b; /* slate-500 */
+  --muted-light: #94a3b8; /* slate-400 */
+  --border: #e2e8f0; /* slate-200 */
+  --border-dark: #cbd5e1; /* slate-300 */
+  --surface: #f1f5f9;
+  --up: #ef4444; /* red-500 */
+  --down: #3b82f6; /* blue-500 */
+  --shadow-card: 0 4px 24px -4px rgba(15, 23, 42, 0.04), 0 1px 4px -2px rgba(15, 23, 42, 0.04);
+  --shadow-soft: 0 2px 12px -2px rgba(15, 23, 42, 0.03);
 }
 
 @theme inline {
@@ -26,8 +31,7 @@
   --color-primary: var(--primary);
   --color-muted: var(--muted);
   --color-border: var(--border);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: "Pretendard Variable", Pretendard, system-ui, -apple-system, sans-serif;
 
   @keyframes marquee {
     from { transform: translateX(0); }
@@ -35,10 +39,14 @@
   }
 }
 
+* {
+  font-family: "Pretendard Variable", Pretendard, system-ui, -apple-system, sans-serif !important;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 .animate-marquee {
@@ -50,21 +58,23 @@ body {
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background-image: radial-gradient(circle, #d4d4d4 1px, transparent 1px);
-  background-size: 24px 24px;
-  opacity: 0.35;
+  background-image: radial-gradient(circle, #cbd5e1 1px, transparent 1px);
+  background-size: 32px 32px;
+  opacity: 0.2;
 }
 
+/* 핀터레스트 스타일: 둥근 모서리(Bento Box)와 부드러운 그림자 */
 .card-modern {
   background: var(--card);
-  border-radius: 12px;
+  border-radius: 20px;
   box-shadow: var(--shadow-card);
   border: 1px solid var(--border);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .card-modern-sm {
   background: var(--card);
-  border-radius: 10px;
+  border-radius: 16px;
   box-shadow: var(--shadow-soft);
   border: 1px solid var(--border);
 }
@@ -72,36 +82,30 @@ body {
 .btn-primary {
   background: var(--primary);
   color: white;
-  border-radius: 10px;
+  border-radius: 14px;
   font-weight: 600;
-  transition: background 0.2s, transform 0.15s;
+  box-shadow: 0 4px 14px -2px rgba(79, 70, 229, 0.4);
+  transition: all 0.2s ease;
 }
 
 .btn-primary:hover {
   background: var(--primary-hover);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px -2px rgba(79, 70, 229, 0.5);
 }
 
-.badge-up {
-  background: var(--primary);
-  color: white;
+/* Glassmorphism 효과 */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
 }
 
-.badge-down {
-  background: #525252;
-  color: white;
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
 }
-
-.badge-muted {
-  background: #f5f5f5;
-  color: #525252;
-  border: 1px solid var(--border);
-}
-
-.progress-bar {
-  background: var(--primary);
-}
-
-.progress-bar-muted {
-  background: #a3a3a3;
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }

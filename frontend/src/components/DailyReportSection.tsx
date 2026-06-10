@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import useSWR from 'swr';
-import { Bot, ExternalLink, Loader2, RefreshCw, TrendingDown, TrendingUp, Zap } from 'lucide-react';
+import Link from 'next/link';
+import { Bot, ExternalLink, Loader2, TrendingDown, TrendingUp, Zap } from 'lucide-react';
 import { fetcher } from '@/lib/api';
 import { formatIndexPrice, formatStockPrice } from '@/lib/format';
-import { useGenerateReport } from '@/hooks/useGenerateReport';
 
 interface ReportHighlight {
   type: string;
@@ -79,6 +79,7 @@ export interface DailyReport {
   updated_at?: string;
   next_refresh_at?: string;
   data_collected_at?: string;
+  news_collected_at?: string;
   report_generated_at?: string;
 }
 
@@ -216,15 +217,21 @@ function PicksTable({
             {visible.length === 0 && (
               <tr>
                 <td colSpan={3} className="px-4 py-8 text-center text-sm text-neutral-400">
-                  표시할 종목이 없습니다. 「데이터 불러오기」로 당일 데이터를 적재하면 화면이 갱신됩니다.
+                  표시할 종목이 없습니다.{' '}
+                  <Link href="/data" className="font-bold text-indigo-600 underline underline-offset-2">
+                    데이터 로딩 페이지
+                  </Link>
+                  에서 당일 데이터를 적재하면 화면이 갱신됩니다.
                 </td>
               </tr>
             )}
             {visible.map((pick) => (
-              <tr key={pick.ticker} className="border-b border-neutral-100 last:border-0 hover:bg-neutral-50">
+              <tr key={pick.ticker} className="border-b border-neutral-100 last:border-0 hover:bg-neutral-50 transition-colors">
                 <td className="px-4 py-3 align-top">
-                  <div className="font-bold text-neutral-900">{pick.name}</div>
-                  <div className="text-xs text-neutral-400">{pick.ticker}</div>
+                  <Link href={`/stocks/${pick.ticker}`} className="group block">
+                    <div className="font-bold text-neutral-900 group-hover:text-indigo-600 transition-colors">{pick.name}</div>
+                    <div className="text-xs text-neutral-400 group-hover:text-indigo-400 transition-colors">{pick.ticker}</div>
+                  </Link>
                 </td>
                 <td className="max-w-xs px-4 py-3 align-top leading-relaxed text-neutral-600">
                   {isValidNewsUrl(pick.news_url) ? (
@@ -262,7 +269,6 @@ export default function DailyReportSection() {
   const [countdown, setCountdown] = useState('--:--:--');
   const [longExpanded, setLongExpanded] = useState(false);
   const [shortExpanded, setShortExpanded] = useState(false);
-  const { generate, loading: generating, error: generateError } = useGenerateReport();
 
   useEffect(() => {
     const tick = () => setCountdown(formatCountdown(data?.next_refresh_at));
@@ -274,14 +280,14 @@ export default function DailyReportSection() {
   if (isLoading) {
     return (
       <div className="flex justify-center py-16">
-        <Loader2 className="h-8 w-8 animate-spin text-neutral-900" />
+        <Loader2 className="h-8 w-8 animate-spin text-sky-600" />
       </div>
     );
   }
 
   if (error && !data) {
     return (
-      <div className="rounded-xl border border-neutral-300 bg-neutral-100 p-6 text-center text-neutral-700">
+      <div className="rounded-xl border border-sky-200 bg-sky-50 p-6 text-center text-sky-800 font-medium">
         리포트를 불러오지 못했습니다. 백엔드 서버가 실행 중인지 확인해주세요.
       </div>
     );
@@ -294,13 +300,17 @@ export default function DailyReportSection() {
   return (
     <div className="space-y-6">
       {!isLive && (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          아직 수집된 데이터가 없습니다. 「데이터 불러오기」를 실행하면 yfinance·KRX 시세와 뉴스가 DB에 저장됩니다.
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm">
+          아직 수집된 데이터가 없습니다.{' '}
+          <Link href="/data" className="font-bold text-amber-800 underline underline-offset-2 hover:text-amber-950">
+            데이터 로딩 페이지
+          </Link>
+          에서 시세·뉴스 수집을 실행해주세요.
         </p>
       )}
       {isLive && data.data_collected_at && (
-        <p className="text-xs text-neutral-500">
-          데이터 적재: {new Date(data.data_collected_at).toLocaleString('ko-KR')} · 당일 기준 수치
+        <p className="text-xs text-sky-500 font-bold uppercase tracking-wider">
+          Market Snapshot: {new Date(data.data_collected_at).toLocaleString('ko-KR')}
         </p>
       )}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -319,32 +329,50 @@ export default function DailyReportSection() {
           />
         </div>
 
-        <section className="card-modern p-6">
-          <div className="mb-5 flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-neutral-100">
-              <Bot className="h-6 w-6 text-neutral-700" />
+        <section className="card-modern p-6 bg-white flex flex-col">
+          <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 shadow-[0_2px_8px_rgba(79,70,229,0.1)]">
+                <Bot className="h-6 w-6 text-indigo-600" />
+              </div>
+              <div>
+                <h3 className="font-black text-slate-900 uppercase tracking-tight">AI Report</h3>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Gemini Analysis</p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-bold text-neutral-900">AI 리포트</h3>
-              <p className="text-xs text-neutral-500">당일 Top5 롱/숏 기반 Gemini 분석</p>
+            
+            <div className="flex flex-col items-end gap-1.5">
+              <Link
+                href="/data"
+                className="btn-primary flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] shadow-sm"
+              >
+                <Zap className="h-3.5 w-3.5" />
+                데이터 로딩에서 리포트 작성
+              </Link>
+              {data.report_generated_at && (
+                <p className="text-right text-[9px] font-bold text-slate-400 uppercase tracking-tighter">
+                  Update: {new Date(data.report_generated_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                </p>
+              )}
             </div>
           </div>
-          <div className="max-h-[520px] space-y-5 overflow-y-auto pr-1 text-left">
+          
+          <div className="space-y-5 text-left">
             {/* 시장 요약 통합 */}
             {data.market_summary && (
-              <div className="rounded-xl bg-neutral-900 p-5 text-white shadow-lg">
-                <h4 className="mb-3 flex items-center gap-2 text-sm font-bold">
-                  <Zap className="h-4 w-4 text-yellow-400" /> 오늘 한줄 요약
+              <div className="rounded-2xl bg-slate-900 p-5 text-white shadow-lg shadow-slate-900/10">
+                <h4 className="mb-3 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-300">
+                  <Zap className="h-4 w-4 text-yellow-400" /> Daily Briefing
                 </h4>
-                <p className="text-sm leading-relaxed text-neutral-200">
+                <p className="text-base leading-relaxed text-slate-100 font-medium">
                   {data.market_summary}
                 </p>
                 {data.highlights?.length > 0 && (
-                  <div className="mt-4 space-y-2 border-t border-neutral-800 pt-4">
+                  <div className="mt-4 space-y-2 border-t border-slate-700 pt-4">
                     {data.highlights.map((h, i) => (
-                      <div key={i} className="flex items-start gap-2 text-xs">
-                        <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-yellow-400" />
-                        <span className="text-neutral-400">{h.text}</span>
+                      <div key={i} className="flex items-start gap-2 text-[13px] font-medium">
+                        <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-slate-400" />
+                        <span className="text-slate-300">{h.text}</span>
                       </div>
                     ))}
                   </div>
@@ -359,17 +387,20 @@ export default function DailyReportSection() {
                   if (!reports.length) return null;
                   return (
                     <div key={position} className="space-y-3">
-                      <h4 className="text-sm font-bold text-neutral-900">
+                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                         {position === 'long' ? '매수(롱) Top5' : '매도(숏) Top5'}
                       </h4>
                       {reports.map((report) => (
-                        <div key={`${position}-${report.ticker}`} className="rounded-lg border border-neutral-100 p-3 shadow-sm hover:border-neutral-200 transition-colors">
-                          <div className="mb-1 text-sm font-semibold text-neutral-900">
-                            {report.name} <span className="text-xs text-neutral-400">{report.ticker}</span>
-                          </div>
-                          <ul className="list-disc space-y-1 pl-4 text-xs leading-relaxed text-neutral-600">
+                        <div key={`${position}-${report.ticker}`} className="rounded-2xl border border-slate-100 p-4 shadow-sm hover:border-indigo-200 hover:bg-slate-50 transition-all group">
+                          <Link href={`/stocks/${report.ticker}`} className="block mb-3 text-base font-black text-slate-900 group-hover:text-indigo-600 transition-colors">
+                            {report.name} <span className="text-xs font-bold text-slate-400 uppercase ml-1 group-hover:text-indigo-400">{report.ticker}</span>
+                          </Link>
+                          <ul className="space-y-2 text-sm leading-relaxed text-slate-600 font-medium">
                             {report.lines.slice(0, 3).map((line, i) => (
-                              <li key={i}>{line}</li>
+                              <li key={i} className="flex gap-2.5">
+                                <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-slate-300" />
+                                {line}
+                              </li>
                             ))}
                           </ul>
                         </div>
@@ -379,37 +410,17 @@ export default function DailyReportSection() {
                 })}
               </>
             ) : (
-              <p className="rounded-lg bg-neutral-50 p-4 text-center text-sm text-neutral-500">
-                아직 작성된 AI 리포트가 없습니다. 데이터 불러오기 후 리포트를 작성해주세요.
-              </p>
+              <div className="rounded-2xl bg-slate-50/50 border border-dashed border-slate-200 p-8 text-center">
+                <p className="text-xs font-bold text-slate-400 leading-relaxed">
+                  아직 작성된 AI 리포트가 없습니다.<br/>
+                  <Link href="/data" className="font-bold text-indigo-600 underline underline-offset-2">
+                    데이터 로딩 페이지
+                  </Link>
+                  에서 AI 리포트를 작성해주세요.
+                </p>
+              </div>
             )}
           </div>
-          {data.report_generated_at && (
-            <p className="mt-4 text-center text-xs text-neutral-400">
-              마지막 리포트: {new Date(data.report_generated_at).toLocaleString('ko-KR')}
-            </p>
-          )}
-          {data.next_refresh_at && (
-            <p className="mt-1 text-center text-xs text-neutral-400">
-              다음 기준 시각까지 {countdown}
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={generate}
-            disabled={generating}
-            className="btn-primary mt-6 flex w-full max-w-xs items-center justify-center gap-2 px-5 py-3 text-sm disabled:opacity-60"
-          >
-            {generating ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-            {generating ? '리포트 작성 중…' : 'AI 리포트 작성'}
-          </button>
-          {generateError && (
-            <p className="mt-3 text-center text-xs text-neutral-600">{generateError}</p>
-          )}
         </section>
       </div>
     </div>
@@ -420,7 +431,11 @@ export function MacroTicker({ indices }: { indices: MarketIndex[] }) {
   if (!indices.length) {
     return (
       <section className="card-modern px-4 py-3 text-sm text-neutral-500">
-        시장 지수 데이터 없음. 데이터 불러오기 후 표시됩니다.
+        시장 지수 데이터 없음.{' '}
+        <Link href="/data" className="font-bold text-indigo-600 underline underline-offset-2">
+          데이터 로딩 페이지
+        </Link>
+        에서 시세 수집 후 표시됩니다.
       </section>
     );
   }
