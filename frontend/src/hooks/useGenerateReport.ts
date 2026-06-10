@@ -18,14 +18,16 @@ export function useGenerateReport() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const generate = useCallback(async () => {
+  const generate = useCallback(async (): Promise<boolean> => {
     setLoading(true);
     setError(null);
     try {
       await generateReport();
       await Promise.all(CACHE_KEYS.map((key) => mutate(key)));
+      return true;
     } catch (e: unknown) {
       setError(extractErrorMessage(e));
+      return false;
     } finally {
       setLoading(false);
     }
