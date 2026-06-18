@@ -12,9 +12,9 @@
   --primary-hover: #6d28d9;
   --muted: #6b5f7a;
   --muted-light: #8a7da3;
-  --border: #e0d4ec;
-  --border-dark: #cfc2e0;
-  --surface: #ede4ff;
+  --border: #d1c1e0;
+  --border-dark: #b3a4c9;
+  --surface: #e9deff;
   --up: #ef4444;
   --down: #3b82f6;
   --accent-mint: #6ee7b7;
@@ -23,8 +23,8 @@
   --radius-lg: 24px;
   --radius-xl: 32px;
   --radius-2xl: 40px;
-  --shadow-card: 0 4px 24px -4px rgba(109, 40, 217, 0.14), 0 2px 8px -2px rgba(42, 35, 56, 0.08);
-  --shadow-soft: 0 2px 14px -2px rgba(109, 40, 217, 0.1), 0 1px 4px rgba(42, 35, 56, 0.05);
+  --shadow-card: 0 4px 20px -2px rgba(109, 40, 217, 0.12), 0 2px 8px -1px rgba(42, 35, 56, 0.06);
+  --shadow-soft: 0 2px 10px -1px rgba(109, 40, 217, 0.08), 0 1px 4px rgba(42, 35, 56, 0.04);
 }
 
 @theme inline {
@@ -33,6 +33,7 @@
   --color-primary: var(--primary);
   --color-muted: var(--muted);
   --color-border: var(--border);
+  --color-border-dark: var(--border-dark);
   --color-sidebar: var(--sidebar);
   --color-sidebar-hover: var(--sidebar-hover);
   --color-sidebar-active: var(--sidebar-active);
@@ -77,7 +78,7 @@ body {
   background: var(--card);
   border-radius: 28px;
   box-shadow: var(--shadow-card);
-  border: none;
+  border: 1.5px solid var(--border-dark);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -120,30 +121,34 @@ body {
 /* AI Report 패널 — 텍스트 영역은 연한 틴트 */
 .ai-report-panel {
   background: linear-gradient(165deg, #faf7ff 0%, #fdf9f6 50%, #fffafa 100%);
-  border: none;
+  border: 1.5px solid var(--border);
   box-shadow: var(--shadow-card);
 }
 
 .ai-report-header {
   background: linear-gradient(
     90deg,
-    rgba(237, 228, 255, 0.35) 0%,
-    rgba(255, 255, 255, 0.75) 55%,
-    rgba(254, 226, 226, 0.15) 100%
+    rgba(237, 228, 255, 0.45) 0%,
+    rgba(255, 255, 255, 0.85) 55%,
+    rgba(254, 226, 226, 0.2) 100%
   );
+  border-bottom: none;
 }
 
 .ai-report-briefing {
   background: linear-gradient(135deg, rgba(237, 228, 255, 0.28) 0%, rgba(255, 255, 255, 0.92) 55%, #fefcf9 100%);
+  border: 1.5px solid var(--border);
   box-shadow: var(--shadow-soft);
 }
 
 .ai-report-long-card {
   background: linear-gradient(135deg, rgba(237, 228, 255, 0.22) 0%, #ffffff 65%);
+  border: 1.5px solid var(--border);
   box-shadow: var(--shadow-soft);
 }
 
 .ai-report-short-card {
   background: linear-gradient(135deg, rgba(224, 242, 254, 0.28) 0%, #ffffff 65%);
+  border: 1.5px solid #dbeafe; /* 더 짙은 푸른색 테두리 */
   box-shadow: var(--shadow-soft);
 }

@@ -33,11 +33,30 @@ export default function DiscoverPage() {
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('quant_score');
   const [market, setMarket] = useState('ALL');
+  
+  // 상세 필터 상태
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    min_per: '', max_per: '',
+    min_pbr: '', max_pbr: '',
+    min_roe: '',
+    ncav_only: false
+  });
+
+  const handleFilterChange = (key: string, value: string | boolean) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+  };
 
   const queryParams = new URLSearchParams({
     sort_by: sortBy === 'quant_score' ? 'ai_score' : sortBy,
     ...(search && { q: search }),
-    ...(market !== 'ALL' && { market })
+    ...(market !== 'ALL' && { market }),
+    ...(filters.min_per && { min_per: filters.min_per }),
+    ...(filters.max_per && { max_per: filters.max_per }),
+    ...(filters.min_pbr && { min_pbr: filters.min_pbr }),
+    ...(filters.max_pbr && { max_pbr: filters.max_pbr }),
+    ...(filters.min_roe && { min_roe: filters.min_roe }),
+    ...(filters.ncav_only && { ncav_only: 'true' })
   });
 
   const { data: stocks, error, isLoading } = useSWR<Stock[]>(`/stocks/scan?${queryParams.toString()}`, fetcher);
@@ -130,6 +149,53 @@ export default function DiscoverPage() {
           <div className="ml-auto text-xs font-semibold text-muted bg-card px-3 py-1.5 rounded-xl shadow-[var(--shadow-soft)]">
             총 <span className="text-primary">{stocks?.length ?? 0}</span>개의 종목 분석 중
           </div>
+        </div>
+
+        <div className="mt-2">
+          <button 
+            onClick={() => setShowFilters(!showFilters)}
+            className="flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary-hover transition-colors"
+          >
+            {showFilters ? <ChevronDown className="h-4 w-4 rotate-180 transition-transform" /> : <ChevronDown className="h-4 w-4 transition-transform" />}
+            상세 필터 {showFilters ? '접기' : '펴기'}
+          </button>
+          
+          {showFilters && (
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 p-5 rounded-2xl bg-surface/50 border border-border/50 shadow-[var(--shadow-soft)] animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-muted uppercase tracking-wider">PER (배)</label>
+                <div className="flex items-center gap-2">
+                  <input type="number" placeholder="Min" value={filters.min_per} onChange={e => handleFilterChange('min_per', e.target.value)} className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary" />
+                  <span className="text-muted">-</span>
+                  <input type="number" placeholder="Max" value={filters.max_per} onChange={e => handleFilterChange('max_per', e.target.value)} className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary" />
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-muted uppercase tracking-wider">PBR (배)</label>
+                <div className="flex items-center gap-2">
+                  <input type="number" placeholder="Min" value={filters.min_pbr} onChange={e => handleFilterChange('min_pbr', e.target.value)} className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary" />
+                  <span className="text-muted">-</span>
+                  <input type="number" placeholder="Max" value={filters.max_pbr} onChange={e => handleFilterChange('max_pbr', e.target.value)} className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary" />
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-muted uppercase tracking-wider">ROE (%)</label>
+                <input type="number" placeholder="최소 ROE 입력" value={filters.min_roe} onChange={e => handleFilterChange('min_roe', e.target.value)} className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary" />
+              </div>
+              <div className="flex flex-col justify-end gap-1.5 pb-1">
+                <label className="flex items-center gap-2 cursor-pointer group">
+                  <div className={cn(
+                    "flex h-5 w-5 items-center justify-center rounded border transition-colors",
+                    filters.ncav_only ? "bg-primary border-primary" : "border-border bg-card group-hover:border-primary/50"
+                  )}>
+                    {filters.ncav_only && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                  </div>
+                  <input type="checkbox" className="hidden" checked={filters.ncav_only} onChange={e => handleFilterChange('ncav_only', e.target.checked)} />
+                  <span className="text-sm font-semibold text-foreground">NCAV 저평가 종목만</span>
+                </label>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
