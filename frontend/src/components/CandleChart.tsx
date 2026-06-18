@@ -2,136 +2,227 @@
 
 import React, { useMemo } from 'react';
 import {
+  ComposedChart,
+  BarChart,
+  Bar,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  AreaChart,
   Area,
 } from 'recharts';
 import { chartColors } from '@/lib/chart-colors';
+import { formatNumber } from '@/lib/format';
+import { cn } from '@/lib/cn';
+import type { TechnicalBarPoint, TechnicalSnapshot } from '@/lib/api';
 
-interface BarData {
-  trade_date: string;
-  open_price: number;
-  high_price: number;
-  low_price: number;
-  close_price: number;
-  volume: number;
-}
+const TOSS_UP = '#F04452';
+const TOSS_DOWN = '#3182F6';
 
 interface CandleChartProps {
-  data: BarData[];
+  data: TechnicalBarPoint[];
+  snapshot?: TechnicalSnapshot;
 }
 
-const CustomTooltip = ({ active, payload }: any) => {
-  if (active && payload && payload.length) {
-    const data = payload[0].payload;
-    const isUp = data.close_price >= data.open_price;
-    const change = data.close_price - data.open_price;
-    const changePct = (change / data.open_price) * 100;
+const PriceTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload: TechnicalBarPoint }> }) => {
+  if (!active || !payload?.length) return null;
+  const data = payload[0].payload;
+  const isUp = data.close_price >= data.open_price;
+  const change = data.close_price - data.open_price;
+  const changePct = data.open_price ? (change / data.open_price) * 100 : 0;
 
-    return (
-      <div className="rounded-xl bg-card/95 p-4 shadow-xl backdrop-blur-md text-xs">
-        <p className="mb-2 font-semibold text-muted">{data.trade_date}</p>
-        <div className="space-y-2">
-          <div className="flex justify-between gap-8">
-            <span className="text-muted font-medium">종가</span>
-            <span className={`font-semibold ${isUp ? 'text-up' : 'text-down'}`}>
-              {data.close_price.toLocaleString()}원 ({changePct >= 0 ? '+' : ''}{changePct.toFixed(2)}%)
-            </span>
-          </div>
-          <div className="h-[1px] bg-border" />
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
-            <span className="text-muted">시가</span>
-            <span className="text-right font-semibold text-foreground">{data.open_price.toLocaleString()}</span>
-            <span className="text-muted">고가</span>
-            <span className="text-right font-semibold text-foreground">{data.high_price.toLocaleString()}</span>
-            <span className="text-muted">저가</span>
-            <span className="text-right font-semibold text-foreground">{data.low_price.toLocaleString()}</span>
-          </div>
+  return (
+    <div className="rounded-xl bg-card/95 p-4 shadow-xl backdrop-blur-md text-xs">
+      <p className="mb-2 font-semibold text-muted">{data.trade_date}</p>
+      <div className="space-y-2">
+        <div className="flex justify-between gap-8">
+          <span className="text-muted font-medium">종가</span>
+          <span className={cn('font-semibold', isUp ? 'text-up' : 'text-down')}>
+            {data.close_price.toLocaleString()} ({changePct >= 0 ? '+' : ''}
+            {changePct.toFixed(2)}%)
+          </span>
+        </div>
+        <div className="h-[1px] bg-border" />
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+          <span className="text-muted">시가</span>
+          <span className="text-right font-semibold">{data.open_price.toLocaleString()}</span>
+          <span className="text-muted">고가</span>
+          <span className="text-right font-semibold">{data.high_price.toLocaleString()}</span>
+          <span className="text-muted">저가</span>
+          <span className="text-right font-semibold">{data.low_price.toLocaleString()}</span>
+          {data.ma20 != null && (
+            <>
+              <span className="text-muted">MA20</span>
+              <span className="text-right font-semibold">{formatNumber(data.ma20, 0)}</span>
+            </>
+          )}
+          {data.rsi14 != null && (
+            <>
+              <span className="text-muted">RSI</span>
+              <span className="text-right font-semibold">{formatNumber(data.rsi14, 1)}</span>
+            </>
+          )}
         </div>
       </div>
-    );
-  }
-  return null;
+    </div>
+  );
 };
 
-export default function CandleChart({ data }: CandleChartProps) {
-  const isTrendUp = useMemo(() => {
-    if (!data || data.length < 2) return true;
-    const firstPrice = data[0].close_price;
-    const lastPrice = data[data.length - 1].close_price;
-    return lastPrice >= firstPrice;
+export default function CandleChart({ data, snapshot }: CandleChartProps) {
+  const lineColor = useMemo(() => {
+    if (!data?.length) return TOSS_UP;
+    return data[data.length - 1].close_price >= data[0].close_price ? TOSS_UP : TOSS_DOWN;
   }, [data]);
 
-  const trendColor = isTrendUp ? chartColors.up : chartColors.down;
-
   const { minPrice, maxPrice } = useMemo(() => {
-    if (!data || data.length === 0) return { minPrice: 0, maxPrice: 100 };
-    const values = data.map(d => d.close_price);
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const range = max - min;
+    if (!data?.length) return { minPrice: 0, maxPrice: 100 };
+    const closes = data.map((d) => d.close_price);
+    const min = Math.min(...closes);
+    const max = Math.max(...closes);
+    const range = max - min || max * 0.05;
     return {
-      minPrice: min - (range * 0.1),
-      maxPrice: max + (range * 0.1)
+      minPrice: min - range * 0.08,
+      maxPrice: max + range * 0.08,
     };
   }, [data]);
 
+  const volumeData = useMemo(
+    () =>
+      data.map((d) => ({
+        trade_date: d.trade_date,
+        volume: d.volume,
+        isUp: d.close_price >= d.open_price,
+      })),
+    [data],
+  );
+
+  if (!data?.length) {
+    return (
+      <div className="flex h-full items-center justify-center text-xs text-muted">
+        차트 데이터가 없습니다.
+      </div>
+    );
+  }
+
+  const alignmentLabel =
+    snapshot?.ma_alignment === 'bullish'
+      ? '정배열'
+      : snapshot?.ma_alignment === 'bearish'
+      ? '역배열'
+      : '중립';
+
+  const gradientId = lineColor === TOSS_UP ? 'toss-up-gradient' : 'toss-down-gradient';
+
   return (
-    <div className="h-[400px] w-full select-none">
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart
-          data={data}
-          margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-        >
-          <defs>
-            <linearGradient id="colorTrend" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={trendColor} stopOpacity={0.25}/>
-              <stop offset="95%" stopColor={trendColor} stopOpacity={0}/>
-            </linearGradient>
-          </defs>
+    <div className="flex h-full w-full flex-col gap-2 select-none">
+      {snapshot && (
+        <div className="flex flex-wrap items-center gap-2 px-1">
+          {snapshot.rsi14 != null && (
+            <span className="rounded-lg bg-surface px-2 py-0.5 text-[10px] font-semibold text-muted">
+              RSI {formatNumber(snapshot.rsi14, 1)}
+            </span>
+          )}
+          {snapshot.vs_ma20_pct != null && (
+            <span className="rounded-lg bg-surface px-2 py-0.5 text-[10px] font-semibold text-muted">
+              MA20 {snapshot.vs_ma20_pct > 0 ? '+' : ''}
+              {formatNumber(snapshot.vs_ma20_pct, 1)}%
+            </span>
+          )}
+          <span className="rounded-lg bg-sidebar-active px-2 py-0.5 text-[10px] font-semibold text-primary">
+            {alignmentLabel}
+          </span>
+          {snapshot.volume_ratio_vs_20d != null && (
+            <span className="rounded-lg bg-surface px-2 py-0.5 text-[10px] font-semibold text-muted">
+              거래량 {formatNumber(snapshot.volume_ratio_vs_20d, 1)}x
+            </span>
+          )}
+        </div>
+      )}
 
-          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartColors.grid} />
+      <div className="min-h-0 flex-[3]">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id="toss-up-gradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={TOSS_UP} stopOpacity={0.18} />
+                <stop offset="100%" stopColor={TOSS_UP} stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="toss-down-gradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={TOSS_DOWN} stopOpacity={0.18} />
+                <stop offset="100%" stopColor={TOSS_DOWN} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartColors.grid} />
+            <XAxis
+              dataKey="trade_date"
+              tick={{ fontSize: 9, fill: chartColors.axis, fontWeight: 500 }}
+              axisLine={false}
+              tickLine={false}
+              minTickGap={40}
+            />
+            <YAxis
+              domain={[minPrice, maxPrice]}
+              tick={{ fontSize: 9, fill: chartColors.axis, fontWeight: 500 }}
+              axisLine={false}
+              tickLine={false}
+              orientation="right"
+              tickFormatter={(v) => v.toLocaleString()}
+              width={55}
+            />
+            <Tooltip content={<PriceTooltip />} cursor={{ stroke: chartColors.grid, strokeDasharray: '4 4' }} />
+            <Area
+              type="monotone"
+              dataKey="close_price"
+              stroke="none"
+              fill={`url(#${gradientId})`}
+              isAnimationActive={false}
+            />
+            <Line
+              type="monotone"
+              dataKey="close_price"
+              stroke={lineColor}
+              strokeWidth={2}
+              dot={false}
+              isAnimationActive={false}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
 
-          <XAxis
-            dataKey="trade_date"
-            tick={{ fontSize: 10, fill: chartColors.axis, fontWeight: 500 }}
-            axisLine={false}
-            tickLine={false}
-            minTickGap={50}
-          />
-
-          <YAxis
-            domain={[minPrice, maxPrice]}
-            tick={{ fontSize: 10, fill: chartColors.axis, fontWeight: 500 }}
-            axisLine={false}
-            tickLine={false}
-            orientation="right"
-            tickFormatter={(value) => value.toLocaleString()}
-            width={60}
-          />
-
-          <Tooltip
-            content={<CustomTooltip />}
-            cursor={{ stroke: chartColors.grid, strokeWidth: 1, strokeDasharray: '5 5' }}
-          />
-
-          <Area
-            type="monotone"
-            dataKey="close_price"
-            stroke={trendColor}
-            strokeWidth={3}
-            fillOpacity={1}
-            fill="url(#colorTrend)"
-            isAnimationActive={false}
-            activeDot={{ r: 5, strokeWidth: 0, fill: trendColor }}
-          />
-
-        </AreaChart>
-      </ResponsiveContainer>
+      <div className="min-h-0 flex-[1]">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={volumeData} margin={{ top: 0, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartColors.grid} />
+            <XAxis
+              dataKey="trade_date"
+              tick={{ fontSize: 8, fill: chartColors.axis }}
+              axisLine={false}
+              tickLine={false}
+              minTickGap={50}
+            />
+            <YAxis
+              tick={{ fontSize: 8, fill: chartColors.axis }}
+              axisLine={false}
+              tickLine={false}
+              orientation="right"
+              tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
+              width={45}
+            />
+            <Bar
+              dataKey="volume"
+              radius={[1, 1, 0, 0]}
+              isAnimationActive={false}
+              shape={(props: { x?: number; y?: number; width?: number; height?: number; payload?: { isUp: boolean } }) => {
+                const { x = 0, y = 0, width = 0, height = 0, payload } = props;
+                const fill = payload?.isUp ? TOSS_UP : TOSS_DOWN;
+                return <rect x={x} y={y} width={width} height={height} fill={fill} />;
+              }}
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

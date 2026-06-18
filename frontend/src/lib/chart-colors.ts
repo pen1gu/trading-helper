@@ -1,6 +1,6 @@
 export const chartColors = {
-  up: '#ef4444',
-  down: '#3b82f6',
+  up: '#f43f5e', // 더 선명한 빨간색 (상승)
+  down: '#2563eb', // 더 선명한 파란색 (하락)
   grid: '#e0d4ec',
   axis: '#a89bb8',
   series: ['#a78bfa', '#6ee7b7', '#fcd34d', '#fca5a5'],

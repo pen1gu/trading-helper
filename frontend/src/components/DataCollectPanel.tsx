@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Clock,
+  FileText,
 } from 'lucide-react';
 import { API_BASE_URL } from '@/lib/api';
 import { formatDate } from '@/lib/format';
@@ -48,6 +49,7 @@ type ActionKind =
   | 'news'
   | 'insight-watchlist'
   | 'insight-all'
+  | 'disclosure-watchlist'
   | 'report';
 
 interface ActionConfig {
@@ -55,7 +57,7 @@ interface ActionConfig {
   label: string;
   description: string;
   icon: typeof Database;
-  variant: 'sky' | 'amber' | 'emerald' | 'violet' | 'indigo';
+  variant: 'sky' | 'amber' | 'emerald' | 'violet' | 'rose' | 'indigo';
   warning?: string;
   lastUpdatedAt?: string | null;
 }
@@ -70,6 +72,8 @@ function getStreamUrl(kind: ActionKind): string | null {
       return `${API_BASE_URL}/report/insight-stream?scope=watchlist`;
     case 'insight-all':
       return `${API_BASE_URL}/report/insight-stream?scope=all`;
+    case 'disclosure-watchlist':
+      return `${API_BASE_URL}/report/disclosure-stream?scope=watchlist`;
     default:
       return null;
   }
@@ -83,6 +87,7 @@ function variantStyles(variant: ActionConfig['variant'], status: 'idle' | 'runni
     amber: 'bg-[#fbbf24] text-white hover:bg-[#f59e0b] shadow-lg shadow-[#fde68a] disabled:bg-[#fffbeb] disabled:text-[#fcd34d]',
     emerald: 'bg-[#34d399] text-white hover:bg-[#10b981] shadow-lg shadow-[#a7f3d0] disabled:bg-[#d1fae5] disabled:text-[#6ee7b7]',
     violet: 'bg-[#a78bfa] text-white hover:bg-[#8b5cf6] shadow-lg shadow-[#ddd6fe] disabled:bg-[#ede9fe] disabled:text-[#c4b5fd]',
+    rose: 'bg-[#fb7185] text-white hover:bg-[#f43f5e] shadow-lg shadow-[#fecdd3] disabled:bg-[#fff1f2] disabled:text-[#fda4af]',
     indigo: 'bg-primary text-white hover:bg-primary-hover shadow-lg shadow-[#ddd6fe] disabled:bg-sidebar-active disabled:text-[#c4b5fd]',
   };
   return map[variant];
@@ -179,6 +184,7 @@ function CollectActionButton({
           config.variant === 'amber' && 'bg-[#fffbeb] text-[#d97706]',
           config.variant === 'emerald' && 'bg-[#d1fae5] text-[#059669]',
           config.variant === 'violet' && 'bg-[#ede9fe] text-[#7c3aed]',
+          config.variant === 'rose' && 'bg-[#fff1f2] text-[#e11d48]',
           config.variant === 'indigo' && 'bg-sidebar-active text-primary',
         )}>
           <Icon className="h-5 w-5" strokeWidth={1.5} />
@@ -366,6 +372,14 @@ export default function DataCollectPanel({ status }: { status?: CollectStatus })
       icon: Globe,
       variant: 'violet',
       warning: '수백~1000종목, 30분 이상 소요될 수 있습니다.',
+      lastUpdatedAt: status?.financials.last_collected_at,
+    },
+    {
+      kind: 'disclosure-watchlist',
+      label: '공시 수집 (관심종목)',
+      description: '관심종목 DART 공시를 수집합니다. (국내 종목)',
+      icon: FileText,
+      variant: 'rose',
       lastUpdatedAt: status?.financials.last_collected_at,
     },
     {
