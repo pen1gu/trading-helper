@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, TypedDict
+from typing import Dict, List, Literal, Optional, TypedDict
 
 MAX_NEWS_QUERIES = 6
 
@@ -90,11 +90,80 @@ STOCK_SEARCH_CONTEXT: Dict[str, SearchContext] = {
 }
 
 
+# 경쟁사 표기 → 티커 (DB 유니버스 기준)
+COMPETITOR_ALIASES: Dict[str, str] = {
+    "SK하이닉스": "000660",
+    "삼성전자": "005930",
+    "LG전자": "066570",
+    "LG화학": "051910",
+    "삼성SDI": "006400",
+    "포스코퓨처엠": "003670",
+    "카카오": "035720",
+    "네이버": "035420",
+    "NAVER": "035420",
+    "현대차": "005380",
+    "기아": "000270",
+    "테슬라": "TSLA",
+    "TSLA": "TSLA",
+    "AMD": "AMD",
+    "인텔": "INTC",
+    "Intel": "INTC",
+    "INTC": "INTC",
+    "엔비디아": "NVDA",
+    "NVDA": "NVDA",
+    "구글": "GOOGL",
+    "Google": "GOOGL",
+    "GOOGL": "GOOGL",
+    "마이크로소프트": "MSFT",
+    "MSFT": "MSFT",
+    "애플": "AAPL",
+    "Apple": "AAPL",
+    "AAPL": "AAPL",
+    "아마존": "AMZN",
+    "AMZN": "AMZN",
+    "메타": "META",
+    "META": "META",
+    "GM": "GM",
+    "BYD": "BYD",
+    "리비안": "RIVN",
+    "RIVN": "RIVN",
+    "마이크론": "MU",
+    "MU": "MU",
+    "퀄컴": "QCOM",
+    "QCOM": "QCOM",
+    "오라클": "ORCL",
+    "ORCL": "ORCL",
+    "월마트": "WMT",
+    "WMT": "WMT",
+    "알리바바": "BABA",
+    "BABA": "BABA",
+}
+
+
 def get_search_context(ticker: str) -> SearchContext:
     return STOCK_SEARCH_CONTEXT.get(
         ticker,
         {"keywords": [], "competitors": []},
     )
+
+
+def resolve_competitor_ticker(name: str, name_to_ticker: Dict[str, str]) -> Optional[str]:
+    """경쟁사 이름을 티커로 해석합니다. alias 우선, 없으면 name_to_ticker 맵 사용."""
+    name = name.strip()
+    if not name:
+        return None
+    if name in COMPETITOR_ALIASES:
+        return COMPETITOR_ALIASES[name]
+    if name in name_to_ticker:
+        return name_to_ticker[name]
+    lowered = name.lower()
+    for alias, ticker in COMPETITOR_ALIASES.items():
+        if alias.lower() == lowered:
+            return ticker
+    for stock_name, ticker in name_to_ticker.items():
+        if stock_name and (name in stock_name or stock_name in name):
+            return ticker
+    return None
 
 
 def build_news_queries(ticker: str, name: str) -> List[str]:
