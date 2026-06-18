@@ -1,5 +1,6 @@
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     Column,
     Date,
     DateTime,
@@ -79,6 +80,7 @@ class Stock(Base):
     ai_recommendation = Column(String) # Long, Short, Neutral
     ai_analysis = Column(JSON) # Strengths (수익성, 성장성, 저평가, 안정성, 모멘텀)
     quant_analysis = Column(JSON) # 자체 휴리스틱 모델 분석 결과 (적정가 범위 등)
+    is_crawling_target = Column(Boolean, default=False, nullable=False, server_default='false')
 
     # Business insight (rule-based, no AI)
     business_insight = Column(JSON)
@@ -147,3 +149,36 @@ class Watchlist(Base):
     id = Column(Integer, primary_key=True, index=True)
     ticker = Column(String, unique=True, index=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Disclosure(Base):
+    __tablename__ = "disclosures"
+    __table_args__ = (
+        UniqueConstraint("rcept_no", name="uq_disclosures_rcept_no"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    stock_id = Column(Integer, ForeignKey("stocks.id"), nullable=False, index=True)
+    rcept_no = Column(String, unique=True, nullable=False, index=True)
+    report_nm = Column(String, nullable=False)
+    report_type = Column(String, nullable=False)
+    rcept_dt = Column(Date, nullable=False)
+    dart_url = Column(String)
+    summary = Column(String)
+    collected_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class StockInvestorFlow(Base):
+    __tablename__ = "stock_investor_flows"
+    __table_args__ = (
+        UniqueConstraint("stock_id", "trade_date", name="uq_stock_investor_flows_stock_date"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    stock_id = Column(Integer, ForeignKey("stocks.id"), nullable=False, index=True)
+    trade_date = Column(Date, nullable=False)
+    foreign_net = Column(BigInteger)
+    institutional_net = Column(BigInteger)
+    individual_net = Column(BigInteger)
+    foreign_net_5d = Column(Float)
+    collected_at = Column(DateTime(timezone=True), server_default=func.now())
