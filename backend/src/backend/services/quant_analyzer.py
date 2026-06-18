@@ -12,11 +12,16 @@ def calculate_heuristic_fair_price(stock: models.Stock) -> Dict[str, Any]:
         return {}
 
     # 1. 하한가 (Min) 계산: 가치 + 단기 이평선 기준
-    # PBR 1.0 수준과 20일 이평선 중 높은 값을 참조하되, 현재가의 -7% 보다는 높게 설정
+    # PBR >= 1일 때는 자산가치(BVPS)를 지지선으로 참조, 1 미만일 때는 현재가 대비 하락 방어선 적용
     avg_20d = stock.close_avg_20d or current_price
-    pbr_support = (current_price / stock.pbr) if (stock.pbr and stock.pbr > 0) else (current_price * 0.93)
+    if stock.pbr and stock.pbr >= 1.0:
+        pbr_support = current_price / stock.pbr # BVPS (주당순자산가치)
+    else:
+        # 이미 PBR이 1 미만인 경우, 자산가치보다 시장가가 낮으므로 현재가 기반 하한선(예: -7%) 적용
+        pbr_support = current_price * 0.93
     
-    min_price = max(pbr_support, avg_20d * 0.98, current_price * 0.93)
+    # 지지선은 (PBR지지선, 20일 이평선 하단, 현재가 -7%) 중 가장 신뢰도 높은 값을 선택
+    min_price = max(pbr_support, avg_20d * 0.97, current_price * 0.93)
 
     # 2. 상한가 (Max) 계산: 단기 모멘텀 기준
     # 20일 이평선 대비 +5% 혹은 현재가 대비 +10% 중 보수적인 값 선택
