@@ -12,6 +12,7 @@ from ..database import get_db
 from .. import models, schemas
 from ..services.report_pipeline import (
     DataCollectionPipeline,
+    DisclosureCollectionPipeline,
     InsightCollectionPipeline,
     ReportGenerationPipeline,
     ReportPipeline,
@@ -174,7 +175,27 @@ async def get_collect_status(db: AsyncSession = Depends(get_db)):
         news=schemas.NewsCollectStatus(**status["news"]),
         financials=schemas.FinancialsCollectStatus(**status["financials"]),
         report=schemas.ReportCollectStatus(**status["report"]),
+        disclosures=schemas.DisclosureCollectStatus(**status["disclosures"]),
+        investor_flow=schemas.InvestorFlowCollectStatus(**status["investor_flow"]),
     )
+
+
+@router.get("/disclosure-stream")
+async def collect_disclosure_stream(
+    scope: str = Query("watchlist", description="watchlist | all"),
+    db: AsyncSession = Depends(get_db),
+):
+    """DART 공시 수집 진행률 SSE. scope=watchlist(관심종목) | all(전체 유니버스)."""
+    if scope not in ("watchlist", "all"):
+        raise HTTPException(status_code=400, detail="scope must be watchlist or all")
+
+    pipeline = DisclosureCollectionPipeline()
+
+    async def event_generator():
+        async for progress_data in pipeline.run_stream(db, scope=scope):
+            yield f"data: {json.dumps(progress_data, ensure_ascii=False, default=str)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.get("/insight-stream")

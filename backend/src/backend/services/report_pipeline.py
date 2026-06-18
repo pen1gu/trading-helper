@@ -204,14 +204,39 @@ async def _save_news_items(
     db: AsyncSession,
     stock: models.Stock,
     news_items: List[Dict[str, Any]],
+    analyzer: Optional[Any] = None,
 ) -> int:
     saved = 0
+    sentiment_calls = 0
+    max_sentiment_per_batch = 3
+
     for item in news_items:
         news_exists = await db.execute(
             select(models.News).where(models.News.url == item["url"])
         )
         if news_exists.scalars().first():
             continue
+
+        sentiment_score = item.get("sentiment_score")
+        summary = item.get("summary")
+        hot_keywords = item.get("hot_keywords")
+
+        if (
+            analyzer is not None
+            and getattr(analyzer, "model", None) is not None
+            and sentiment_calls < max_sentiment_per_batch
+        ):
+            content = item.get("title", "")
+            body = item.get("summary") or item.get("content") or ""
+            if body:
+                content = f"{content}\n{body}"
+            result = await analyzer.analyze_sentiment(content[:2000])
+            if "error" not in result:
+                sentiment_score = result.get("sentiment_score", sentiment_score)
+                summary = result.get("summary") or summary
+                hot_keywords = result.get("hot_keywords") or hot_keywords
+                sentiment_calls += 1
+
         db.add(
             models.News(
                 stock_id=stock.id,
@@ -220,8 +245,9 @@ async def _save_news_items(
                 url=item["url"],
                 source=item.get("source"),
                 published_at=item.get("published_at"),
-                summary=item.get("summary"),
-                hot_keywords=item.get("hot_keywords"),
+                sentiment_score=sentiment_score,
+                summary=summary,
+                hot_keywords=hot_keywords,
             )
         )
         saved += 1
@@ -232,8 +258,12 @@ async def _persist_quote_and_news(
     db: AsyncSession,
     fetch_results: List[Dict[str, Any]],
     collected_at: datetime,
+    analyzer: Optional[Any] = None,
 ) -> Tuple[int, List[str], List[models.Stock], int, int]:
     """시세·뉴스 저장. (성공수, errors, stocks, 신규뉴스수, 뉴스스킵수) 반환."""
+    from ..data.ticker_utils import is_kr_ticker
+    from .investor_flow_crawler import collect_investor_flow_for_stock
+
     processed_count = 0
     errors: List[str] = []
     saved_stocks: List[models.Stock] = []
@@ -259,8 +289,16 @@ async def _persist_quote_and_news(
         if res.get("news_skipped"):
             news_skip_count += 1
         else:
-            new_news_count += await _save_news_items(db, stock, res.get("news", []))
+            new_news_count += await _save_news_items(
+                db, stock, res.get("news", []), analyzer=analyzer
+            )
             mark_news_collected(stock, collected_at)
+
+        if is_kr_ticker(ticker):
+            try:
+                await collect_investor_flow_for_stock(db, stock, collected_at=collected_at)
+            except Exception as e:
+                errors.append(f"{ticker}: investor flow failed ({e})")
 
         saved_stocks.append(stock)
         processed_count += 1
@@ -269,11 +307,18 @@ async def _persist_quote_and_news(
 
 
 async def _build_universe(db: AsyncSession, collector) -> List[str]:
-    """KR Top 1000 + PRICE_UNIVERSE + watchlist 유니버스."""
+    """KR Top 1000 + PRICE_UNIVERSE + watchlist + 수동 크롤링 타겟 유니버스."""
     kr_top_1000 = await asyncio.to_thread(collector.get_top_tickers, "KR", 1000)
+    
+    # 관심종목 가져오기
     watchlist_res = await db.execute(select(models.Watchlist.ticker))
     watchlist_tickers = [r for r in watchlist_res.scalars().all()]
-    return list(set(PRICE_UNIVERSE_TICKERS) | set(kr_top_1000) | set(watchlist_tickers))
+    
+    # 수동 크롤링 타겟 종목 가져오기
+    target_res = await db.execute(select(models.Stock.ticker).where(models.Stock.is_crawling_target == True))
+    target_tickers = [r for r in target_res.scalars().all()]
+    
+    return list(set(PRICE_UNIVERSE_TICKERS) | set(kr_top_1000) | set(watchlist_tickers) | set(target_tickers))
 
 
 async def _collect_ticker_batch(
@@ -303,13 +348,18 @@ async def _collect_ticker_batch(
     fetch_results = await asyncio.gather(*(bounded_fetch(t) for t in universe))
     task_logger.info("collect.fetching_data_parallel completed")
 
+    from .analyzer import AIAnalyzer
+
+    analyzer = AIAnalyzer()
     (
         processed_count,
         errors,
         saved_stocks,
         new_news_count,
         news_skip_count,
-    ) = await _persist_quote_and_news(db, fetch_results, collected_at)
+    ) = await _persist_quote_and_news(
+        db, fetch_results, collected_at, analyzer=analyzer
+    )
     await db.commit()
 
     report_result = await db.execute(select(models.MarketReport).limit(1))
@@ -412,6 +462,11 @@ class DataCollectionPipeline:
 
         yield {"progress": 65, "message": "데이터 페치 완료, DB 저장 중...", "status": "collecting"}
 
+        from ..data.ticker_utils import is_kr_ticker
+        from .analyzer import AIAnalyzer
+        from .investor_flow_crawler import collect_investor_flow_for_stock
+
+        analyzer = AIAnalyzer() if collect_news else None
         incremental_count = 0
         for i, res in enumerate(fetch_results, start=1):
             ticker = res["ticker"]
@@ -440,8 +495,18 @@ class DataCollectionPipeline:
                 if res.get("news_skipped"):
                     news_skip_count += 1
                 else:
-                    new_news_count += await _save_news_items(db, stock, res.get("news", []))
+                    new_news_count += await _save_news_items(
+                        db, stock, res.get("news", []), analyzer=analyzer
+                    )
                     mark_news_collected(stock, collected_at)
+
+            if collect_market and is_kr_ticker(ticker):
+                try:
+                    await collect_investor_flow_for_stock(
+                        db, stock, collected_at=collected_at
+                    )
+                except Exception as e:
+                    errors.append(f"{ticker}: investor flow failed ({e})")
 
             saved_stocks.append(stock)
             processed_count += 1
@@ -618,6 +683,175 @@ class InsightCollectionPipeline:
         }
 
 
+DISCLOSURE_CACHE_HOURS = 24
+
+
+def _is_disclosure_cache_valid(collected_at: Optional[datetime]) -> bool:
+    if collected_at is None:
+        return False
+    if collected_at.tzinfo is None:
+        collected_at = collected_at.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - collected_at < timedelta(hours=DISCLOSURE_CACHE_HOURS)
+
+
+async def _resolve_disclosure_stocks(
+    db: AsyncSession,
+    collector,
+    scope: str,
+) -> List[models.Stock]:
+    from ..data.ticker_utils import is_kr_ticker
+
+    stocks = await _resolve_insight_stocks(db, collector, scope)
+    return [s for s in stocks if is_kr_ticker(s.ticker)]
+
+
+async def _latest_disclosure_collected_at(
+    db: AsyncSession, stock_id: int
+) -> Optional[datetime]:
+    from sqlalchemy import func
+
+    result = await db.execute(
+        select(func.max(models.Disclosure.collected_at)).where(
+            models.Disclosure.stock_id == stock_id
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def _save_disclosures_for_stock(
+    db: AsyncSession,
+    stock: models.Stock,
+    collected_at: datetime,
+) -> int:
+    from .disclosure_crawler import DisclosureCrawler
+
+    crawler = DisclosureCrawler()
+    records = await asyncio.to_thread(crawler.fetch_recent, stock.ticker)
+    saved = 0
+    for rec in records:
+        exists = await db.execute(
+            select(models.Disclosure).where(models.Disclosure.rcept_no == rec.rcept_no)
+        )
+        if exists.scalars().first():
+            continue
+        db.add(
+            models.Disclosure(
+                stock_id=stock.id,
+                rcept_no=rec.rcept_no,
+                report_nm=rec.report_nm,
+                report_type=rec.report_type,
+                rcept_dt=rec.rcept_dt,
+                dart_url=rec.dart_url,
+                summary=rec.summary,
+                collected_at=collected_at,
+            )
+        )
+        saved += 1
+    return saved
+
+
+class DisclosureCollectionPipeline:
+    """국내 종목 DART 공시 수집."""
+
+    def __init__(self):
+        from .collector import DataCollector
+
+        self.collector = DataCollector()
+
+    async def run_stream(self, db: AsyncSession, scope: str = "watchlist"):
+        started = time.perf_counter()
+        scope_label = "관심종목" if scope == "watchlist" else "전체 유니버스"
+
+        yield {
+            "progress": 0,
+            "stage": "disclosure_collection",
+            "message": f"{scope_label} 공시 수집 대상 조회 중...",
+            "status": "running",
+        }
+
+        stocks = await _resolve_disclosure_stocks(db, self.collector, scope)
+        pending: List[models.Stock] = []
+        skipped = 0
+        for stock in stocks:
+            last_at = await _latest_disclosure_collected_at(db, stock.id) if stock.id else None
+            if _is_disclosure_cache_valid(last_at):
+                skipped += 1
+            else:
+                pending.append(stock)
+
+        total = len(pending)
+        if total == 0:
+            yield {
+                "progress": 100,
+                "stage": "disclosure_collection",
+                "message": f"공시 수집 대상 없음 (캐시 유효 {skipped}종목)",
+                "status": "done",
+                "done_count": 0,
+                "total": 0,
+                "skipped_count": skipped,
+            }
+            return
+
+        yield {
+            "progress": 5,
+            "stage": "disclosure_collection",
+            "message": f"공시 수집 시작 ({total}종목, 캐시 스킵 {skipped}종목)...",
+            "status": "running",
+            "done_count": 0,
+            "total": total,
+            "skipped_count": skipped,
+        }
+
+        errors: List[str] = []
+        done_count = 0
+        saved_total = 0
+        collected_at = datetime.now(KST)
+        semaphore = asyncio.Semaphore(2)
+
+        async def _one(stock: models.Stock) -> None:
+            nonlocal done_count, saved_total
+            async with semaphore:
+                try:
+                    saved_total += await _save_disclosures_for_stock(
+                        db, stock, collected_at
+                    )
+                except Exception as e:
+                    errors.append(f"{stock.ticker}: disclosure failed ({e})")
+                done_count += 1
+
+        tasks = [asyncio.create_task(_one(s)) for s in pending]
+        for coro in asyncio.as_completed(tasks):
+            await coro
+            progress = int(5 + (done_count / total) * 90)
+            current = pending[min(done_count, total - 1)] if pending else None
+            ticker_label = current.ticker if current else ""
+            yield {
+                "progress": progress,
+                "stage": "disclosure_collection",
+                "message": f"공시 수집 중... {ticker_label} ({done_count}/{total})",
+                "status": "running",
+                "done_count": done_count,
+                "total": total,
+            }
+
+        await db.commit()
+        elapsed = time.perf_counter() - started
+        yield {
+            "progress": 100,
+            "stage": "disclosure_collection",
+            "message": (
+                f"공시 수집 완료! {done_count}종목, 신규 {saved_total}건, "
+                f"{len(errors)}개 실패, {elapsed:.1f}초"
+            ),
+            "status": "done",
+            "done_count": done_count,
+            "total": total,
+            "skipped_count": skipped,
+            "saved_count": saved_total,
+            "errors": errors[:10],
+        }
+
+
 async def build_collect_status(db: AsyncSession, collector) -> Dict[str, Any]:
     """데이터 로딩 페이지용 수집 현황 집계."""
     from sqlalchemy import func
@@ -675,6 +909,36 @@ async def build_collect_status(db: AsyncSession, collector) -> Dict[str, Any]:
         1 for s in watchlist_stocks if s.business_insight is not None
     )
 
+    disc_max_result = await db.execute(
+        select(func.max(models.Disclosure.collected_at))
+    )
+    disc_last = disc_max_result.scalar()
+
+    disc_total_result = await db.execute(
+        select(func.count()).select_from(models.Disclosure)
+    )
+    disc_total = disc_total_result.scalar() or 0
+
+    stocks_with_disc_result = await db.execute(
+        select(func.count(func.distinct(models.Disclosure.stock_id)))
+    )
+    stocks_with_disc = stocks_with_disc_result.scalar() or 0
+
+    flow_max_result = await db.execute(
+        select(func.max(models.StockInvestorFlow.collected_at))
+    )
+    flow_last = flow_max_result.scalar()
+
+    flow_total_result = await db.execute(
+        select(func.count()).select_from(models.StockInvestorFlow)
+    )
+    flow_total = flow_total_result.scalar() or 0
+
+    stocks_with_flow_result = await db.execute(
+        select(func.count(func.distinct(models.StockInvestorFlow.stock_id)))
+    )
+    stocks_with_flow = stocks_with_flow_result.scalar() or 0
+
     return {
         "market": {
             "last_collected_at": report.data_collected_at if report else None,
@@ -697,6 +961,16 @@ async def build_collect_status(db: AsyncSession, collector) -> Dict[str, Any]:
         "report": {
             "last_generated_at": report.report_generated_at if report else None,
             "next_refresh_at": report.next_refresh_at if report else None,
+        },
+        "disclosures": {
+            "last_collected_at": disc_last,
+            "total_disclosures": disc_total,
+            "stocks_with_disclosures": stocks_with_disc,
+        },
+        "investor_flow": {
+            "last_collected_at": flow_last,
+            "total_rows": flow_total,
+            "stocks_with_flow": stocks_with_flow,
         },
     }
 
