@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import useSWR, { mutate } from 'swr';
 import {
@@ -117,6 +117,17 @@ export default function StockDetailPage() {
   const [showAllDisclosures, setShowAllDisclosures] = useState(false);
 
   const { data: stock, error: stockError } = useSWR<Stock>(`/stocks/${ticker}`, fetcher);
+
+  useEffect(() => {
+    if (!ticker || !stock) return;
+    apiClient
+      .post(`/recent-views/${ticker}`)
+      .then(() => {
+        mutate((key) => typeof key === 'string' && key.startsWith('/recent-views'));
+      })
+      .catch(() => {});
+  }, [ticker, stock]);
+
   const { data: technicals } = useSWR<TechnicalIndicatorsResponse>(
     `/stocks/${ticker}/technicals?limit=${range}`,
     fetcher,

@@ -1,0 +1,2 @@
+export const SIDEBAR_STOCK_PREVIEW_COUNT = 5;
+export const RECENT_VIEWS_MAX_STORED = 20;

@@ -14,7 +14,7 @@ configure_logging()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .api import stocks, news, report, watchlist
+from .api import stocks, news, report, watchlist, recent_views
 
 app = FastAPI(title="StockInsight AI API")
 app.middleware("http")(request_logging_middleware())
@@ -37,3 +37,4 @@ app.include_router(stocks.router, prefix="/api/stocks", tags=["stocks"])
 app.include_router(news.router, prefix="/api/news", tags=["news"])
 app.include_router(report.router, prefix="/api/report", tags=["report"])
 app.include_router(watchlist.router, prefix="/api/watchlist", tags=["watchlist"])
+app.include_router(recent_views.router, prefix="/api/recent-views", tags=["recent-views"])

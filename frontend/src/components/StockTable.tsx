@@ -31,8 +31,16 @@ interface Stock {
   };
 }
 
-export default function StockTable() {
-  const { data, error, isLoading } = useSWR<Stock[]>('/stocks', fetcher);
+interface StockTableProps {
+  endpoint?: string;
+  emptyMessage?: string;
+}
+
+export default function StockTable({
+  endpoint = '/stocks',
+  emptyMessage = '데이터가 없습니다.',
+}: StockTableProps) {
+  const { data, error, isLoading } = useSWR<Stock[]>(endpoint, fetcher);
 
   const stocks = data ?? [];
 
@@ -92,7 +100,7 @@ export default function StockTable() {
           {stocks.length === 0 && (
             <tr>
               <td colSpan={8} className="px-6 py-12 text-center text-muted">
-                데이터가 없습니다.
+                {emptyMessage}
               </td>
             </tr>
           )}

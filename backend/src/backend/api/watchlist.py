@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
+from sqlalchemy.dialects.postgresql import insert
 from typing import List
 from ..database import get_db
 from .. import models, schemas
@@ -14,16 +15,21 @@ async def get_watchlist(db: AsyncSession = Depends(get_db)):
 
 @router.post("/{ticker}", response_model=schemas.Watchlist)
 async def add_to_watchlist(ticker: str, db: AsyncSession = Depends(get_db)):
-    # 이미 존재하는지 확인
-    existing = await db.execute(select(models.Watchlist).where(models.Watchlist.ticker == ticker))
-    if existing.scalars().first():
-        raise HTTPException(status_code=400, detail="Already in watchlist")
-    
-    new_item = models.Watchlist(ticker=ticker)
-    db.add(new_item)
+    stmt = (
+        insert(models.Watchlist)
+        .values(ticker=ticker)
+        .on_conflict_do_nothing(index_elements=["ticker"])
+        .returning(models.Watchlist)
+    )
+    result = await db.execute(stmt)
+    item = result.scalars().first()
+    if item is None:
+        result = await db.execute(
+            select(models.Watchlist).where(models.Watchlist.ticker == ticker)
+        )
+        item = result.scalars().one()
     await db.commit()
-    await db.refresh(new_item)
-    return new_item
+    return item
 
 @router.delete("/{ticker}")
 async def remove_from_watchlist(ticker: str, db: AsyncSession = Depends(get_db)):

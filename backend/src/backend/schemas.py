@@ -97,6 +97,16 @@ class Watchlist(WatchlistBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class RecentViewBase(BaseModel):
+    ticker: str
+
+
+class RecentView(RecentViewBase):
+    id: int
+    viewed_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
 class NewsBase(BaseModel):
     title: str
     content: Optional[str] = None

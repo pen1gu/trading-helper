@@ -151,6 +151,14 @@ class Watchlist(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class RecentView(Base):
+    __tablename__ = "recent_views"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String, unique=True, index=True, nullable=False)
+    viewed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class Disclosure(Base):
     __tablename__ = "disclosures"
     __table_args__ = (
