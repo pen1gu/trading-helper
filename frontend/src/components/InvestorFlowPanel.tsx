@@ -117,7 +117,7 @@ export default function InvestorFlowPanel({ ticker }: Props) {
             <p className="mb-1 text-[10px] font-semibold text-muted">{item.label}</p>
             <p
               className={cn(
-                'text-sm font-bold',
+                'text-xs font-bold tabular-nums',
                 (item.value ?? 0) > 0 ? 'text-up' : (item.value ?? 0) < 0 ? 'text-down' : 'text-muted',
               )}
             >

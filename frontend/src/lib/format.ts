@@ -3,6 +3,15 @@ export function isKoreanTicker(ticker?: string): boolean {
   return Boolean(ticker && /^\d+$/.test(ticker));
 }
 
+/** 워런트·단위증권 등 일반 주식 분석에 적합하지 않을 수 있는 US 티커 */
+export function isLikelyWarrantOrNonEquity(ticker?: string): boolean {
+  if (!ticker) return false;
+  const t = ticker.trim().toUpperCase();
+  if (isKoreanTicker(t)) return false;
+  // US warrant / unit 관례: 티커가 W 또는 U로 끝남 (예: DBCAW, APCXW)
+  return /[WU]$/.test(t);
+}
+
 /** USD/KRW 등 환율 지수 */
 export function isFxIndex(indexName?: string): boolean {
   return indexName === 'USDKRW=X';

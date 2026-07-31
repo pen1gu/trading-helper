@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import useSWR from 'swr';
 import { fetcher, type BuyRationaleResponse, type BuyRationalePillar } from '@/lib/api';
-import { formatDate } from '@/lib/format';
+import { formatDate, isLikelyWarrantOrNonEquity } from '@/lib/format';
 import { cn } from '@/lib/cn';
 
 const PILLAR_META: Record<
@@ -119,6 +119,8 @@ export default function WhyBuyPanel({ ticker }: Props) {
     ([, v]) => v != null,
   );
 
+  const showNonEquityHint = isLikelyWarrantOrNonEquity(ticker);
+
   return (
     <div className="card-modern p-6 space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -140,6 +142,15 @@ export default function WhyBuyPanel({ ticker }: Props) {
           </span>
         </div>
       </div>
+
+      {showNonEquityHint && (
+        <div className="flex items-start gap-2 rounded-xl bg-[#fffbeb] px-3 py-2.5">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#d97706]" strokeWidth={2} />
+          <p className="text-[11px] font-medium text-[#b45309]">
+            워런트·단위증권은 재무·가치 지표가 비어 있을 수 있어 점수가 참고용에 가깝습니다.
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {data.pillars.map((pillar) => (

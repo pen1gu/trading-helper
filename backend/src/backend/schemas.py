@@ -71,6 +71,12 @@ class Stock(StockBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class StockRefreshResponse(BaseModel):
+    stock: Stock
+    errors: List[str] = []
+    steps: Dict[str, str] = {}
+
+
 class StockDailyBarBase(BaseModel):
     trade_date: date
     open_price: Optional[float] = None

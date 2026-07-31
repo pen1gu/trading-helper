@@ -6,8 +6,10 @@ import useSWR, { mutate } from 'swr';
 import {
   fetcher,
   apiClient,
+  refreshStockData,
   type TechnicalIndicatorsResponse,
   type NewsSummaryResponse,
+  type FinancialsResponse,
 } from '@/lib/api';
 import {
   formatNumber,
@@ -41,6 +43,7 @@ import FinancialsPanel from '@/components/FinancialsPanel';
 import EarningsCalendarBadge from '@/components/EarningsCalendarBadge';
 import InvestorFlowPanel from '@/components/InvestorFlowPanel';
 import RelatedStocksPanel from '@/components/RelatedStocksPanel';
+import MetricHelpLabel from '@/components/MetricHelpLabel';
 import { cn } from '@/lib/cn';
 import { type DisclosuresResponse } from '@/lib/api';
 
@@ -76,6 +79,7 @@ interface AIAnalysis {
 interface Stock {
   ticker: string;
   name: string;
+  market?: string | null;
   current_price?: number;
   change_rate: number;
   change_amount?: number;
@@ -86,6 +90,7 @@ interface Stock {
   roe?: number;
   dividend_yield?: number;
   foreign_ownership?: number;
+  data_collected_at?: string | null;
   ai_score?: number;
   ai_recommendation?: string;
   ai_analysis?: AIAnalysis;
@@ -145,6 +150,10 @@ export default function StockDetailPage() {
     `/stocks/${ticker}/disclosures?limit=20`,
     fetcher,
   );
+  const { data: financials } = useSWR<FinancialsResponse>(
+    `/stocks/${ticker}/financials`,
+    fetcher,
+  );
 
   const regularNews = news ?? [];
   const disclosures = disclosureData?.items ?? [];
@@ -153,9 +162,13 @@ export default function StockDetailPage() {
   const visibleDisclosures = showAllDisclosures ? disclosures : disclosures.slice(0, 5);
   const { data: watchlist } = useSWR<WatchlistItem[]>('/watchlist', fetcher);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
 
   const ncav =
     businessInsight?.deep_value?.ncav ?? stock?.business_insight?.deep_value?.ncav;
+
+  const latestMargin = financials?.rows?.at(-1)?.operating_margin_pct ?? null;
 
   const isWatched = watchlist?.some((w) => w.ticker === ticker);
 
@@ -183,6 +196,32 @@ export default function StockDetailPage() {
       alert('AI 분석에 실패했습니다.');
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const handleRefreshStock = async () => {
+    setIsRefreshing(true);
+    setRefreshError(null);
+    try {
+      const result = await refreshStockData(ticker);
+      mutate(`/stocks/${ticker}`, result.stock, { revalidate: false });
+      mutate((key) => typeof key === 'string' && key.startsWith(`/stocks/${ticker}/technicals`));
+      mutate(`/stocks/${ticker}/business-insight`);
+      mutate(`/stocks/${ticker}/news-summary`);
+      mutate((key) => typeof key === 'string' && key.startsWith(`/news/stock/${ticker}`));
+      mutate((key) => typeof key === 'string' && key.startsWith(`/stocks/${ticker}/disclosures`));
+      mutate(`/stocks/${ticker}/financials`);
+      mutate(`/stocks/${ticker}/investor-flow`);
+      mutate(`/stocks/${ticker}/earnings-calendar`);
+      mutate(`/stocks/${ticker}/buy-rationale`);
+      if (result.errors.length > 0) {
+        setRefreshError('일부 데이터 갱신에 실패했습니다.');
+      }
+    } catch (err) {
+      console.error('Refresh failed:', err);
+      setRefreshError('데이터 갱신에 실패했습니다.');
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -230,6 +269,10 @@ export default function StockDetailPage() {
         stock={stock}
         isWatched={!!isWatched}
         onToggleWatchlist={toggleWatchlist}
+        onRefresh={handleRefreshStock}
+        isRefreshing={isRefreshing}
+        lastCollectedAt={stock.data_collected_at}
+        refreshError={refreshError}
       />
 
       <div className="flex flex-1 flex-col gap-5 xl:flex-row">
@@ -284,7 +327,7 @@ export default function StockDetailPage() {
           <FinancialsPanel ticker={ticker} />
 
           <div className="card-modern p-6 space-y-6">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-7">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
               {[
                 { label: '시가총액', value: formatMarketCapEok(stock.market_cap, ticker), unit: '억' },
                 { label: 'NCAV', value: ncav != null ? formatNumber(ncav / 100000000, 0) : '-', unit: '억' },
@@ -293,15 +336,23 @@ export default function StockDetailPage() {
                 { label: 'ROE', value: formatRatioPercent(stock.roe), unit: '' },
                 { label: '배당률', value: formatRatioPercent(stock.dividend_yield), unit: '' },
                 { label: '외인', value: formatRatioPercent(stock.foreign_ownership), unit: '' },
+                {
+                  label: '이익수익률',
+                  value:
+                    latestMargin != null ? `${formatNumber(latestMargin, 1)}%` : '-',
+                  unit: '',
+                },
               ].map((item, idx) => (
                 <div
                   key={idx}
-                  className="rounded-2xl border-2 border-border bg-card py-4 pl-6 pr-4 shadow-[var(--shadow-soft)]"
+                  className="relative min-w-0 overflow-visible rounded-2xl border-2 border-border bg-card py-4 pl-4 pr-3 shadow-[var(--shadow-soft)]"
                 >
-                  <p className="mb-1 text-sm font-bold uppercase text-primary/80">{item.label}</p>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-lg font-bold text-foreground">{item.value}</span>
-                    <span className="text-[10px] font-bold text-primary/70">{item.unit}</span>
+                  <MetricHelpLabel label={item.label} />
+                  <div className="flex min-w-0 items-baseline gap-1">
+                    <span className="truncate text-sm font-bold tabular-nums text-foreground">
+                      {item.value}
+                    </span>
+                    <span className="shrink-0 text-[10px] font-bold text-primary/70">{item.unit}</span>
                   </div>
                 </div>
               ))}
@@ -393,7 +444,7 @@ export default function StockDetailPage() {
                 </div>
               </div>
               {stock.ai_score != null && (
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-card text-lg font-bold text-primary shadow-[var(--shadow-soft)]">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-card text-base font-bold tabular-nums text-primary shadow-[var(--shadow-soft)]">
                   {stock.ai_score}
                 </div>
               )}

@@ -18,6 +18,7 @@ from ..services.collector import DataCollector
 from ..services.feature_store import collect_stock_features
 from ..services.technical_analyzer import BarInput, TechnicalAnalyzer
 from ..services.related_stocks_service import find_related_stocks
+from ..services.stock_refresh_service import refresh_stock_data
 
 router = APIRouter()
 
@@ -318,6 +319,16 @@ async def get_related_stocks(
         items=[schemas.RelatedStockItem(**item) for item in items],
         total=len(items),
     )
+
+
+@router.post("/{ticker}/refresh", response_model=schemas.StockRefreshResponse)
+async def refresh_stock(ticker: str, db: AsyncSession = Depends(get_db)):
+    """Gemini 분석을 제외한 단일 종목 데이터를 갱신합니다."""
+    try:
+        stock, errors, steps = await refresh_stock_data(db, ticker)
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    return schemas.StockRefreshResponse(stock=stock, errors=errors, steps=steps)
 
 
 @router.get("/{ticker}", response_model=schemas.Stock)

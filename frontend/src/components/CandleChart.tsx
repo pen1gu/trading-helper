@@ -106,6 +106,19 @@ export default function CandleChart({ data, snapshot }: CandleChartProps) {
     );
   }
 
+  if (data.length < 2) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-1 text-center px-4">
+        <p className="text-xs font-medium text-muted">
+          일봉 데이터가 부족합니다 ({data.length}일)
+        </p>
+        <p className="text-[10px] text-muted/80">
+          추세·이동평균 분석을 위해 최소 2일 이상의 일봉이 필요합니다.
+        </p>
+      </div>
+    );
+  }
+
   const alignmentLabel =
     snapshot?.ma_alignment === 'bullish'
       ? '정배열'

@@ -23,6 +23,23 @@ export const generateReport = () =>
 export const refreshDailyReport = () =>
   apiClient.post('/report/refresh').then((res) => res.data);
 
+export interface StockRefreshResponse {
+  stock: {
+    ticker: string;
+    name?: string;
+    current_price?: number;
+    change_rate?: number;
+    volume?: number;
+    data_collected_at?: string | null;
+    [key: string]: unknown;
+  };
+  errors: string[];
+  steps: Record<string, string>;
+}
+
+export const refreshStockData = (ticker: string) =>
+  apiClient.post<StockRefreshResponse>(`/stocks/${ticker}/refresh`).then((res) => res.data);
+
 // --- Why Buy API types ---
 
 export interface BuyRationalePillar {

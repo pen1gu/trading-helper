@@ -42,9 +42,9 @@ export default function Header() {
   }, []);
 
   return (
-    <header className="mb-6 flex items-center justify-between sticky top-0 z-30 glass-panel py-4 -mx-2 px-2 rounded-2xl">
-      <div className="relative" ref={dropdownRef}>
-        <form onSubmit={handleSearch} className="group relative z-50">
+    <header className="mb-6 flex items-center justify-between sticky top-0 z-50 glass-panel py-4 -mx-2 px-2 rounded-2xl">
+      <div className="relative z-50" ref={dropdownRef}>
+        <form onSubmit={handleSearch} className="group relative">
           <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-muted">
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : <Search className="h-4 w-4 transition-colors group-focus-within:text-primary" strokeWidth={1.5} />}
           </div>
@@ -66,7 +66,7 @@ export default function Header() {
         </form>
 
         {isFocused && query.length >= 1 && (
-          <div className="absolute top-full left-0 mt-2 w-full overflow-hidden rounded-2xl bg-card shadow-xl z-40">
+          <div className="absolute top-full left-0 mt-2 w-full overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
             <div className="max-h-[300px] overflow-y-auto p-1.5">
               {suggestions && suggestions.length > 0 ? (
                 suggestions.slice(0, 10).map((stock) => (
