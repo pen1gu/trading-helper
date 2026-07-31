@@ -10,6 +10,7 @@ import requests
 
 from ..data.ticker_utils import is_kr_ticker
 from .financial_crawler import DART_API_KEY, FinancialCrawler
+from .request_pacing import pace
 
 DART_LIST_URL = "https://opendart.fss.or.kr/api/list.json"
 DART_VIEWER_URL = "https://dart.fss.or.kr/dsaf001/main.do?rcpNo={rcept_no}"
@@ -80,7 +81,7 @@ class DisclosureCrawler:
         page_no = 1
 
         while True:
-            self._financial._throttle(0.2)
+            pace("dart")
             try:
                 resp = requests.get(
                     DART_LIST_URL,

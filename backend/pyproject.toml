@@ -3,7 +3,7 @@ name = "backend"
 version = "0.1.0"
 description = ""
 authors = [
-    {name = "Joon",email = "kkkths@naver.com"}
+    {name = "Joon", email = "kkkths@naver.com"}
 ]
 readme = "README.md"
 requires-python = ">=3.11"
@@ -20,12 +20,11 @@ dependencies = [
     "google-generativeai (>=0.8.6,<0.9.0)",
     "celery (>=5.6.3,<6.0.0)",
     "redis (>=8.0.0,<9.0.0)",
-    "feedparser (>=6.0.12,<7.0.0)"
+    "feedparser (>=6.0.12,<7.0.0)",
 ]
 
 [tool.poetry]
 packages = [{include = "backend", from = "src"}]
-
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
@@ -33,5 +32,5 @@ build-backend = "poetry.core.masonry.api"
 
 [dependency-groups]
 dev = [
-    "alembic (>=1.18.4,<2.0.0)"
+    "alembic (>=1.18.4,<2.0.0)",
 ]

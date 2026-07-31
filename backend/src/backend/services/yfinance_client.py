@@ -7,7 +7,7 @@ import logging
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, Optional, TypeVar
 
 import pandas as pd
 import platformdirs
@@ -15,6 +15,7 @@ import yfinance as yf
 from yfinance.data import YfData
 
 from ..logging_config import task_logger
+from .request_pacing import is_rate_limited, pace, pace_on_ban
 
 T = TypeVar("T")
 
@@ -29,6 +30,10 @@ _AUTH_MARKERS = ("401", "Unauthorized", "Invalid Crumb", "Invalid Cookie")
 def _is_auth_error(exc: BaseException) -> bool:
     msg = str(exc)
     return any(marker in msg for marker in _AUTH_MARKERS)
+
+
+def _should_retry(exc: BaseException) -> bool:
+    return _is_auth_error(exc) or is_rate_limited(exc)
 
 
 def invalidate_yf_session() -> None:
@@ -66,20 +71,23 @@ def invalidate_yf_session() -> None:
 
 
 def call_with_retry(fn: Callable[[], T], *, max_attempts: int = 3) -> T:
-    """yfinance 호출을 semaphore 하에서 실행하고 auth 실패 시 재시도합니다."""
+    """yfinance 호출을 semaphore 하에서 실행하고 auth/rate-limit 실패 시 재시도합니다."""
     last_exc: Exception | None = None
     for attempt in range(max_attempts):
         try:
+            pace("yfinance")
             with _concurrency:
                 return fn()
         except Exception as exc:
             last_exc = exc
-            if _is_auth_error(exc) and attempt < max_attempts - 1:
+            if _should_retry(exc) and attempt < max_attempts - 1:
                 task_logger.debug(
-                    "yfinance auth retry attempt=%d err=%s", attempt + 1, exc
+                    "yfinance retry attempt=%d err=%s", attempt + 1, exc
                 )
-                with _lock:
-                    invalidate_yf_session()
+                if _is_auth_error(exc):
+                    with _lock:
+                        invalidate_yf_session()
+                pace_on_ban("yfinance", attempt)
                 time.sleep(2**attempt)
                 continue
             raise

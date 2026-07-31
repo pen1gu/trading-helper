@@ -16,6 +16,7 @@ import requests
 from dotenv import load_dotenv
 
 from ..data.ticker_utils import is_kr_ticker
+from .request_pacing import pace
 from .yfinance_client import fetch_financial_statements
 
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
@@ -161,15 +162,7 @@ class FinancialCrawler:
     def __init__(self) -> None:
         self._cik_map: Optional[Dict[str, str]] = None
         self._corp_map: Optional[Dict[str, str]] = None
-        self._last_request_at = 0.0
 
-    def _throttle(self, delay: float = 0.15) -> None:
-        elapsed = time.time() - self._last_request_at
-        if elapsed < delay:
-            time.sleep(delay - elapsed)
-        self._last_request_at = time.time()
-
-    @staticmethod
     @staticmethod
     def _dart_account_matches(
         account_nm: str, field_name: str, names: List[str]
@@ -211,7 +204,7 @@ class FinancialCrawler:
         if not cik:
             return FinancialSeries(ticker=ticker, source="sec_edgar")
 
-        self._throttle()
+        pace("dart")
         try:
             resp = requests.get(
                 SEC_FACTS_URL.format(cik=cik),
@@ -273,7 +266,7 @@ class FinancialCrawler:
         year_data: Dict[int, Dict[str, float]] = {}
 
         for year in range(current_year - 1, current_year - 6, -1):
-            self._throttle(0.2)
+            pace("dart")
             try:
                 resp = requests.get(
                     DART_FINANCIALS_URL,
@@ -435,7 +428,7 @@ class FinancialCrawler:
                 data = json.loads(cache_file.read_text(encoding="utf-8"))
                 return self._parse_cik_json(data)
 
-        self._throttle()
+        pace("dart")
         try:
             resp = requests.get(
                 SEC_TICKERS_URL,
@@ -480,7 +473,7 @@ class FinancialCrawler:
                 xml_bytes = cache_file.read_bytes()
 
         if xml_bytes is None:
-            self._throttle(0.2)
+            pace("dart")
             try:
                 resp = requests.get(
                     DART_CORP_CODE_URL,

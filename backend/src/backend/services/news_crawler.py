@@ -11,6 +11,7 @@ import feedparser
 
 from ..data.stock_search_context import build_news_queries, extract_hot_keywords
 from .news_crawl_service import NewsCrawlContext, NewsCrawlMode
+from .request_pacing import is_rate_limited, pace, pace_on_ban
 
 MAX_NEWS_PER_STOCK = 10
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
@@ -56,6 +57,7 @@ def _fetch_rss(query: str) -> List[Dict[str, Any]]:
     )
     items: List[Dict[str, Any]] = []
     try:
+        pace("news")
         feed = feedparser.parse(rss_url)
         for entry in feed.entries[:5]:
             title = getattr(entry, "title", "") or ""
@@ -76,8 +78,9 @@ def _fetch_rss(query: str) -> List[Dict[str, Any]]:
                     "summary": _strip_html(raw_summary)[:500] if raw_summary else None,
                 }
             )
-    except Exception:
-        pass
+    except Exception as exc:
+        if is_rate_limited(exc):
+            pace_on_ban("news", 0)
     return items
 
 
