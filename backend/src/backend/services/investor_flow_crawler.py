@@ -5,13 +5,14 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
 
-from pykrx import stock as krx_stock
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import models
 from ..data.ticker_utils import is_kr_ticker
 from .collector import DataCollector
+from .pykrx_client import get_pykrx_stock, use_pykrx
+from .request_pacing import is_rate_limited, pace, pace_on_ban
 
 
 def _parse_yyyymmdd(value: str) -> date:
@@ -38,17 +39,23 @@ class InvestorFlowCrawler:
         if not is_kr_ticker(ticker):
             return []
 
+        if not use_pykrx():
+            return []
+
         end = end_date or date.today()
         start = start_date or (end - timedelta(days=60))
         from_str = start.strftime("%Y%m%d")
         to_str = end.strftime("%Y%m%d")
 
         try:
+            pace("pykrx")
             with DataCollector._suppress_pykrx_noise():
-                df = krx_stock.get_market_trading_value_by_date(
+                df = get_pykrx_stock().get_market_trading_value_by_date(
                     from_str, to_str, ticker.zfill(6), on="순매수"
                 )
-        except Exception:
+        except Exception as exc:
+            if is_rate_limited(exc):
+                pace_on_ban("pykrx", 0)
             return []
 
         if df is None or df.empty:

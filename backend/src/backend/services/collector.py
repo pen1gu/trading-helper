@@ -10,10 +10,18 @@ import logging
 from datetime import datetime, timedelta
 
 import pandas as pd
-from pykrx import stock as krx
 from typing import Callable, Dict, Any, List, Optional, Tuple
 
 from ..data.ticker_utils import is_kr_ticker
+from .kr_universe import (
+    fetch_kr_tickers_fallback,
+    fetch_us_tickers,
+    save_kr_universe_cache,
+    universe_kr_limit,
+    universe_us_limit,
+)
+from .pykrx_client import get_pykrx_stock, use_pykrx
+from .request_pacing import is_rate_limited, pace, pace_on_ban
 from .watchlist import TICKER_NAME_OVERRIDES
 from .yfinance_client import (
     fetch_history,
@@ -23,6 +31,10 @@ from .yfinance_client import (
 )
 
 HISTORY_YEARS = (5, 3, 1)
+
+
+def _krx():
+    return get_pykrx_stock()
 
 
 class DataCollector:
@@ -90,28 +102,33 @@ class DataCollector:
         max_days: int = 8,
     ) -> pd.DataFrame:
         empty = pd.DataFrame()
+        if not use_pykrx():
+            return empty
         for days_back in range(max_days):
             day = (datetime.now() - timedelta(days=days_back)).strftime("%Y%m%d")
             try:
+                pace("pykrx")
                 with DataCollector._suppress_pykrx_noise():
                     df = fetch_fn(day, ticker)
                 if df is not None and not df.empty:
                     return df
-            except Exception:
+            except Exception as exc:
+                if is_rate_limited(exc):
+                    pace_on_ban("pykrx", days_back)
                 continue
         return empty
 
     @staticmethod
     def _fetch_kr_fundamental(ticker: str) -> pd.DataFrame:
         return DataCollector._krx_fetch_recent(
-            lambda day, t: krx.get_market_fundamental(day, day, t),
+            lambda day, t: _krx().get_market_fundamental(day, day, t),
             ticker,
         )
 
     @staticmethod
     def _fetch_kr_market_cap(ticker: str) -> float | None:
         df = DataCollector._krx_fetch_recent(
-            lambda day, t: krx.get_market_cap(day, day, t),
+            lambda day, t: _krx().get_market_cap(day, day, t),
             ticker,
         )
         if df.empty:
@@ -126,7 +143,7 @@ class DataCollector:
     @staticmethod
     def _fetch_kr_foreign_ownership(ticker: str) -> float | None:
         df = DataCollector._krx_fetch_recent(
-            lambda day, t: krx.get_exhaustion_rates_of_foreign_investment(day, day, t),
+            lambda day, t: _krx().get_exhaustion_rates_of_foreign_investment(day, day, t),
             ticker,
         )
         if df.empty:
@@ -237,27 +254,33 @@ class DataCollector:
         """pykrx 5y→3y→1y 후 yfinance .KS/.KQ fallback. start_date가 있으면 해당 날짜부터 시도."""
         today = datetime.now().strftime("%Y%m%d")
 
-        if start_date:
-            formatted_start = start_date.replace("-", "")
-            try:
-                with DataCollector._suppress_pykrx_noise():
-                    df = krx.get_market_ohlcv_by_date(formatted_start, today, ticker)
-                if df is not None and not df.empty:
-                    source = "pykrx:inc"
-                    return DataCollector._pykrx_df_to_bars(df, source), source
-            except Exception:
-                pass
+        if use_pykrx():
+            if start_date:
+                formatted_start = start_date.replace("-", "")
+                try:
+                    pace("pykrx")
+                    with DataCollector._suppress_pykrx_noise():
+                        df = _krx().get_market_ohlcv_by_date(formatted_start, today, ticker)
+                    if df is not None and not df.empty:
+                        source = "pykrx:inc"
+                        return DataCollector._pykrx_df_to_bars(df, source), source
+                except Exception as exc:
+                    if is_rate_limited(exc):
+                        pace_on_ban("pykrx", 0)
 
-        for years in HISTORY_YEARS:
-            start = (datetime.now() - timedelta(days=365 * years)).strftime("%Y%m%d")
-            try:
-                with DataCollector._suppress_pykrx_noise():
-                    df = krx.get_market_ohlcv_by_date(start, today, ticker)
-                if df is not None and not df.empty:
-                    source = f"pykrx:{years}y"
-                    return DataCollector._pykrx_df_to_bars(df, source), source
-            except Exception:
-                continue
+            for attempt, years in enumerate(HISTORY_YEARS):
+                start = (datetime.now() - timedelta(days=365 * years)).strftime("%Y%m%d")
+                try:
+                    pace("pykrx")
+                    with DataCollector._suppress_pykrx_noise():
+                        df = _krx().get_market_ohlcv_by_date(start, today, ticker)
+                    if df is not None and not df.empty:
+                        source = f"pykrx:{years}y"
+                        return DataCollector._pykrx_df_to_bars(df, source), source
+                except Exception as exc:
+                    if is_rate_limited(exc):
+                        pace_on_ban("pykrx", attempt)
+                    continue
 
         with suppress_yfinance_errors():
             for suffix in (".KS", ".KQ"):
@@ -322,12 +345,30 @@ class DataCollector:
             fundamental = DataCollector._fetch_kr_fundamental(ticker)
             fund_row = fundamental.iloc[-1] if not fundamental.empty else None
 
-            name = TICKER_NAME_OVERRIDES.get(ticker) or krx.get_market_ticker_name(ticker)
+            yf_info = DataCollector._fetch_yf_info(ticker)
+
+            if use_pykrx():
+                try:
+                    pace("pykrx")
+                    name = TICKER_NAME_OVERRIDES.get(ticker) or _krx().get_market_ticker_name(ticker)
+                except Exception:
+                    name = (
+                        TICKER_NAME_OVERRIDES.get(ticker)
+                        or yf_info.get("shortName")
+                        or yf_info.get("longName")
+                        or ticker
+                    )
+            else:
+                name = (
+                    TICKER_NAME_OVERRIDES.get(ticker)
+                    or yf_info.get("shortName")
+                    or yf_info.get("longName")
+                    or ticker
+                )
 
             market_cap = DataCollector._fetch_kr_market_cap(ticker)
             foreign_ownership = DataCollector._fetch_kr_foreign_ownership(ticker)
 
-            yf_info = DataCollector._fetch_yf_info(ticker)
             if market_cap is None:
                 market_cap = DataCollector._safe_float(yf_info.get("marketCap"))
             if foreign_ownership is None and yf_info.get("heldPercentInstitutions") is not None:
@@ -418,19 +459,35 @@ class DataCollector:
         return results
 
     @staticmethod
-    def get_top_tickers(market: str, limit: int = 1000) -> List[str]:
+    def get_top_tickers(market: str, limit: int | None = None) -> List[str]:
         """시가총액 상위 종목 티커를 동적으로 가져옵니다."""
         try:
             if market == "KR":
+                effective_limit = limit if limit is not None else universe_kr_limit()
+                if not use_pykrx():
+                    tickers, _ = fetch_kr_tickers_fallback(effective_limit)
+                    return tickers
                 today = datetime.now().strftime("%Y%m%d")
-                df = krx.get_market_cap(today)
+                pace("pykrx")
+                df = _krx().get_market_cap(today)
                 if df.empty:
-                    df = krx.get_market_cap(
+                    pace("pykrx")
+                    df = _krx().get_market_cap(
                         (datetime.now() - timedelta(days=3)).strftime("%Y%m%d")
                     )
-                return df.index[:limit].tolist()
-            elif market == "US":
-                return []
+                if df.empty:
+                    tickers, _ = fetch_kr_tickers_fallback(effective_limit)
+                    return tickers
+                tickers = [str(t) for t in df.index[:effective_limit].tolist()]
+                save_kr_universe_cache(tickers)
+                return tickers
+            if market == "US":
+                effective_limit = limit if limit is not None else universe_us_limit()
+                tickers, _ = fetch_us_tickers(effective_limit)
+                return tickers
         except Exception:
-            return []
+            if market == "KR":
+                tickers, _ = fetch_kr_tickers_fallback(limit or universe_kr_limit())
+                return tickers
+        return []
 

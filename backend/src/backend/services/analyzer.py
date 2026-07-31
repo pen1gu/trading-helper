@@ -97,39 +97,6 @@ class AIAnalyzer:
             task_logger.exception("gemini.error op=analyze_stock model=%s", self.model_name)
             return {"error": str(e)}
 
-    async def analyze_sentiment(self, news_content: str) -> Dict[str, Any]:
-        """
-        뉴스 기사의 감성 분석을 수행합니다.
-        """
-        if not self.model:
-            return {"error": "Gemini API key not configured"}
-
-        prompt = f"""
-        다음 뉴스 기사의 시장 센티멘트를 분석해주세요.
-        
-        [기사 내용]
-        {news_content}
-        
-        결과는 반드시 다음 JSON 형식으로 응답해주세요:
-        {{
-            "sentiment_score": (0~100, 100에 가까울수록 긍정),
-            "summary": "뉴스 3줄 요약",
-            "hot_keywords": ["키워드1", "키워드2", "키워드3"]
-        }}
-        """
-        
-        try:
-            response = self.model.generate_content(prompt)
-            text = response.text
-            if "```json" in text:
-                text = text.split("```json")[1].split("```")[0]
-            elif "```" in text:
-                text = text.split("```")[1].split("```")[0]
-            
-            return json.loads(text.strip())
-        except Exception as e:
-            return {"error": str(e)}
-
     @staticmethod
     def _normalize_stock_analysis(result: Dict[str, Any]) -> Dict[str, Any]:
         """hot_reason·summary·fair_price_range를 ai_analysis JSON에 병합해 DB 저장 형식으로 정규화합니다."""

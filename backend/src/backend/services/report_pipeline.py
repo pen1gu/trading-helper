@@ -17,7 +17,10 @@ from .news_crawl_service import (
     load_news_crawl_contexts,
     mark_news_collected,
 )
+from .news_sentiment import score_news_sentiment
 from .notifier import DiscordNotifier
+from .kr_universe import universe_kr_limit, universe_us_limit
+from .request_pacing import collect_concurrency
 from .watchlist import (
     MAX_PICKS,
     PRICE_UNIVERSE_TICKERS,
@@ -204,11 +207,8 @@ async def _save_news_items(
     db: AsyncSession,
     stock: models.Stock,
     news_items: List[Dict[str, Any]],
-    analyzer: Optional[Any] = None,
 ) -> int:
     saved = 0
-    sentiment_calls = 0
-    max_sentiment_per_batch = 3
 
     for item in news_items:
         news_exists = await db.execute(
@@ -217,25 +217,13 @@ async def _save_news_items(
         if news_exists.scalars().first():
             continue
 
+        title = item.get("title", "")
+        body = item.get("summary") or item.get("content") or ""
         sentiment_score = item.get("sentiment_score")
+        if sentiment_score is None:
+            sentiment_score = score_news_sentiment(title, body or None)
         summary = item.get("summary")
         hot_keywords = item.get("hot_keywords")
-
-        if (
-            analyzer is not None
-            and getattr(analyzer, "model", None) is not None
-            and sentiment_calls < max_sentiment_per_batch
-        ):
-            content = item.get("title", "")
-            body = item.get("summary") or item.get("content") or ""
-            if body:
-                content = f"{content}\n{body}"
-            result = await analyzer.analyze_sentiment(content[:2000])
-            if "error" not in result:
-                sentiment_score = result.get("sentiment_score", sentiment_score)
-                summary = result.get("summary") or summary
-                hot_keywords = result.get("hot_keywords") or hot_keywords
-                sentiment_calls += 1
 
         db.add(
             models.News(
@@ -258,7 +246,6 @@ async def _persist_quote_and_news(
     db: AsyncSession,
     fetch_results: List[Dict[str, Any]],
     collected_at: datetime,
-    analyzer: Optional[Any] = None,
 ) -> Tuple[int, List[str], List[models.Stock], int, int]:
     """시세·뉴스 저장. (성공수, errors, stocks, 신규뉴스수, 뉴스스킵수) 반환."""
     from ..data.ticker_utils import is_kr_ticker
@@ -289,9 +276,7 @@ async def _persist_quote_and_news(
         if res.get("news_skipped"):
             news_skip_count += 1
         else:
-            new_news_count += await _save_news_items(
-                db, stock, res.get("news", []), analyzer=analyzer
-            )
+            new_news_count += await _save_news_items(db, stock, res.get("news", []))
             mark_news_collected(stock, collected_at)
 
         if is_kr_ticker(ticker):
@@ -307,18 +292,38 @@ async def _persist_quote_and_news(
 
 
 async def _build_universe(db: AsyncSession, collector) -> List[str]:
-    """KR Top 1000 + PRICE_UNIVERSE + watchlist + 수동 크롤링 타겟 유니버스."""
-    kr_top_1000 = await asyncio.to_thread(collector.get_top_tickers, "KR", 1000)
-    
-    # 관심종목 가져오기
+    """KR/US 대규모 유니버스 + watchlist + 수동 크롤링 타겟."""
+    kr_limit = universe_kr_limit()
+    us_limit = universe_us_limit()
+    kr_tickers, us_tickers = await asyncio.gather(
+        asyncio.to_thread(collector.get_top_tickers, "KR", kr_limit),
+        asyncio.to_thread(collector.get_top_tickers, "US", us_limit),
+    )
+
     watchlist_res = await db.execute(select(models.Watchlist.ticker))
     watchlist_tickers = [r for r in watchlist_res.scalars().all()]
-    
-    # 수동 크롤링 타겟 종목 가져오기
-    target_res = await db.execute(select(models.Stock.ticker).where(models.Stock.is_crawling_target == True))
+
+    target_res = await db.execute(
+        select(models.Stock.ticker).where(models.Stock.is_crawling_target == True)
+    )
     target_tickers = [r for r in target_res.scalars().all()]
-    
-    return list(set(PRICE_UNIVERSE_TICKERS) | set(kr_top_1000) | set(watchlist_tickers) | set(target_tickers))
+
+    universe = list(
+        set(PRICE_UNIVERSE_TICKERS)
+        | set(kr_tickers)
+        | set(us_tickers)
+        | set(watchlist_tickers)
+        | set(target_tickers)
+    )
+    task_logger.info(
+        "universe.built kr=%d us=%d watchlist=%d targets=%d total=%d",
+        len(kr_tickers),
+        len(us_tickers),
+        len(watchlist_tickers),
+        len(target_tickers),
+        len(universe),
+    )
+    return universe
 
 
 async def _collect_ticker_batch(
@@ -333,7 +338,7 @@ async def _collect_ticker_batch(
     news_contexts = await load_news_crawl_contexts(db, universe)
     skip_count = count_skip_tickers(news_contexts)
 
-    semaphore = asyncio.Semaphore(15)
+    semaphore = asyncio.Semaphore(collect_concurrency())
 
     async def bounded_fetch(ticker: str):
         async with semaphore:
@@ -348,18 +353,13 @@ async def _collect_ticker_batch(
     fetch_results = await asyncio.gather(*(bounded_fetch(t) for t in universe))
     task_logger.info("collect.fetching_data_parallel completed")
 
-    from .analyzer import AIAnalyzer
-
-    analyzer = AIAnalyzer()
     (
         processed_count,
         errors,
         saved_stocks,
         new_news_count,
         news_skip_count,
-    ) = await _persist_quote_and_news(
-        db, fetch_results, collected_at, analyzer=analyzer
-    )
+    ) = await _persist_quote_and_news(db, fetch_results, collected_at)
     await db.commit()
 
     report_result = await db.execute(select(models.MarketReport).limit(1))
@@ -425,7 +425,7 @@ class DataCollectionPipeline:
         
         skip_count = count_skip_tickers(news_contexts)
 
-        semaphore = asyncio.Semaphore(15)
+        semaphore = asyncio.Semaphore(collect_concurrency())
 
         async def bounded_fetch(ticker: str):
             async with semaphore:
@@ -463,10 +463,8 @@ class DataCollectionPipeline:
         yield {"progress": 65, "message": "데이터 페치 완료, DB 저장 중...", "status": "collecting"}
 
         from ..data.ticker_utils import is_kr_ticker
-        from .analyzer import AIAnalyzer
         from .investor_flow_crawler import collect_investor_flow_for_stock
 
-        analyzer = AIAnalyzer() if collect_news else None
         incremental_count = 0
         for i, res in enumerate(fetch_results, start=1):
             ticker = res["ticker"]
@@ -496,7 +494,7 @@ class DataCollectionPipeline:
                     news_skip_count += 1
                 else:
                     new_news_count += await _save_news_items(
-                        db, stock, res.get("news", []), analyzer=analyzer
+                        db, stock, res.get("news", [])
                     )
                     mark_news_collected(stock, collected_at)
 

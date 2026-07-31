@@ -1,9 +1,9 @@
-"""관심 종목·시세 유니버스 (최대 100종목)."""
+"""관심 종목·시세 유니버스 (보조 fallback)."""
 
 # Gemini 전체 분석(뉴스·AI 점수)
 AI_WATCHLIST_TICKERS = ["005930", "AAPL", "NVDA", "000660", "TSLA", "INTC", "BA"]
 
-# 시세만 갱신 (AI 미실행) — AI 목록과 합쳐 유니크 최대 100
+# 시세 갱신 보조 fallback — 동적 유니버스(DART/SEC/pykrx)가 1순위
 _PRICE_UNIVERSE_RAW = [
     # 국내 (Top 1000은 동적 수집 예정)
     "005930", "000660", "035420",
@@ -34,7 +34,7 @@ _PRICE_UNIVERSE_RAW = [
 _seen: set[str] = set()
 PRICE_UNIVERSE_TICKERS: list[str] = []
 for _t in _PRICE_UNIVERSE_RAW:
-    if _t not in _seen and len(PRICE_UNIVERSE_TICKERS) < 100:
+    if _t not in _seen:
         _seen.add(_t)
         PRICE_UNIVERSE_TICKERS.append(_t)
 
